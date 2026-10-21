@@ -106,3 +106,32 @@
 - Messages that successfully get through are delivered and held (existing 7-day hold for offline recipients stays).
 - Any message that fails to deliver because the recipient has gone offline (no response to the send check) does NOT appear in their message box; the sender is told "they logged off to mesh" and any boost is refunded.
 - Applies to every failed message, not just first or boosted ones.
+
+## 10. Age separation (policy)
+- Kids and adults are fully separated on Cybermates. No cross-age play; people wanting to play with kids can use Xbox-style platforms. Cybermates is not affiliated with that; cross-age play is pure risk with no upside.
+
+## 11. Discover search bar
+- Type a person's name exactly, hit search: blasts a tiny packet looking for that one person; if found, they respond and appear in your list to add.
+- OPEN QUESTION: section 2 assumed "no search features" as the harassment mitigation for delete-and-remake accounts. Exact-name search weakens that; consider limits (rate limit, target can disable being findable, same age band only, blocks honored by identity key).
+
+## 12. Typical session walkthrough
+- Messages: incoming friend requests (from dating etc.), respond; friends list always shows online/offline.
+- Arcade: load into games, play chess, trash talk.
+- Dating: swipe through people. Friends: swipe through people.
+- Video Roulette (YouMingle-style): log in, round robin, talk to random people (18+ only).
+- Block people from messages.
+- Report serious abuse (e.g. threats of sexual content involving children): reports go to a special reports bucket for team review; info can be provided to police.
+
+## 13. Gaming extras
+- Favorite-games profile: dropdown of console + game name, focused on multiplayer games (Ark etc.), maybe not single-player.
+- Looking for Group (LFG) board: users create group postings, like Xbox LFG.
+
+## 14. Tab-specific features
+- Tabs don't need identical features.
+- Friends: Create Event (e.g. a concert). Events post alongside profiles and match to people who like that type of event (free advertising).
+
+## 15. Multiplayer player limits per game (decided 2026-10-21 call)
+- Rule: match each game's max players to what the game does.
+- Chat/sketch games (Draw & Guess, mostly text): scale to a couple hundred. The earlier 50 -> 100 bump stands, with a couple hundred as the target for mass-arena chat-style games.
+- Real-time sync games (Tron, Snake Battle, Air Hockey, Battleship): cap around 20 max. Tron specifically 8-12; 20 is the stated ceiling.
+- NOTE: supersedes the blanket "all mass games capped at 100" rule for real-time games; currently built code still uses 100 for mass Snake/Tron/Mega Fleet.
