@@ -21,7 +21,6 @@ import { helpView } from './help.js';
 import { adminKillPanel } from './admin.js';
 import { arcadeView, stopArcade } from './arcade-ui.js';
 import { rouletteView } from './roulette-ui.js';
-import { brawlView, stopBrawl } from './brawl-ui.js';
 import { visibleFor as rouletteVisible } from './roulette.js';
 import * as T from './theme.js';
 T.applyLook(); T.initTypingGlow(); import('./fx-pointer.js').then(F => F.initPointerFx()); import('./sfx.js').then(S => S.initAudioUnlock()); import('./lasers.js').then(L => L.initLasers());
@@ -160,11 +159,11 @@ async function render() {
   const unread = st.me ? (await db.listMessages(st.me.id)).filter(m => m.to === st.me.id && !m.read).length : 0;
   app.innerHTML = `<header><b class="logo">${logoHTML()}<small>social mesh</small></b>${T.headerToggles()}${IU.parentButton(st.me)}<span class="who">${st.me ? avatar(st.me, 30, { self: true }) : ''}</span></header>
   <main id="view"></main>
-  <nav>${[['discover', '🔥', 'Discover'], ['inbox', '💬', 'Inbox' + (unread ? ` (${unread})` : '')], ['arcade', '🕹', 'Arcade'], ['brawl', '💥', 'Brawl'], ...(st.me && rouletteVisible(st.me) ? [['roulette', '🎲', 'Connect']] : []), ['profile', '👤', 'Profile'], ['shop', '💎', 'Shop'], ['help', '🤖', 'Help'], ...(ADMIN ? [['dev', '🛠', 'Dev']] : [])].map(([t, i, l]) => `<button data-tab="${t}" class="${st.tab === t ? 'on' : ''}">${navIcon(t, st.tab === t)}${l}</button>`).join('')}</nav>`;
+  <nav>${[['discover', '🔥', 'Discover'], ['inbox', '💬', 'Inbox' + (unread ? ` (${unread})` : '')], ['arcade', '🕹', 'Arcade'], ...(st.me && rouletteVisible(st.me) ? [['roulette', '🎲', 'Connect']] : []), ['profile', '👤', 'Profile'], ['shop', '💎', 'Shop'], ['help', '🤖', 'Help'], ...(ADMIN ? [['dev', '🛠', 'Dev']] : [])].map(([t, i, l]) => `<button data-tab="${t}" class="${st.tab === t ? 'on' : ''}">${navIcon(t, st.tab === t)}${l}</button>`).join('')}</nav>`;
   T.wireHeader(app); app.querySelector('#parentbtn')?.addEventListener('click', () => IU.openParent());
   app.querySelectorAll('nav button').forEach(b => b.onclick = () => { st.tab = b.dataset.tab; st.chatWith = null; st.meshChat = null; render(); });
-  const v = $('#view'); if (st.tab !== 'arcade') stopArcade(); if (st.tab !== 'brawl') stopBrawl(); if (st.tab === 'roulette' && !rouletteVisible(st.me)) st.tab = 'discover'; // 18+ only
-  await ({ discover, arcade: av => arcadeView(av, st.me), brawl: bv => brawlView(bv, st.me), roulette: rv => rouletteView(rv, st.me), inbox, onboard, profile, shop, help: hv => helpView(hv, st.me), ...(ADMIN ? { dev } : {}) })[st.tab]?.(v);
+  const v = $('#view'); if (st.tab !== 'arcade') stopArcade(); if (st.tab === 'roulette' && !rouletteVisible(st.me)) st.tab = 'discover'; // 18+ only
+  await ({ discover, arcade: av => arcadeView(av, st.me), roulette: rv => rouletteView(rv, st.me), inbox, onboard, profile, shop, help: hv => helpView(hv, st.me), ...(ADMIN ? { dev } : {}) })[st.tab]?.(v);
 }
 
 const unitOf = p => prefFor(p, 'dating').unit || D.unitFor(p.countryCode);
@@ -413,10 +412,12 @@ async function dev(v) {
 // new user flow: when current user is missing, onboarding renders without st.me
 const _render = render; let termsOk = false, jacked = false, joiningAs = null, noticeShown = false;
 render = async function () {
-  if (!termsOk) { const { getVault } = await import('./settings-ui.js'); { const C = await import('./compliance.js'); const v0 = await getVault(); const ag = await C.ageStatus(v0); if (!ag?.adult) await C.ageGateScreen(v0, { blocked: ag && !ag.adult }); } const { needsTerms, termsScreen } = await import('./terms.js'); const v = await getVault(); if (await needsTerms(v)) await termsScreen(v); termsOk = true; }
-  const id = await db.getCurrentUserId(); const p = await db.getProfile(id);
+  const step = n => globalThis.__cmStep?.(n);
+  if (!termsOk) { step('load-settings'); const { getVault } = await import('./settings-ui.js'); { step('load-compliance'); const C = await import('./compliance.js'); const v0 = await getVault(); step('age-status'); const ag = await C.ageStatus(v0); step('age-gate'); if (!ag?.adult) await C.ageGateScreen(v0, { blocked: ag && !ag.adult }); } step('terms'); const { needsTerms, termsScreen } = await import('./terms.js'); const v = await getVault(); if (await needsTerms(v)) await termsScreen(v); termsOk = true; }
+  step('profile-load'); const id = await db.getCurrentUserId(); const p = await db.getProfile(id);
   if (!p) { st.me = null; st.tab = 'onboard'; const app = $('#app'); app.innerHTML = `<header><b class="logo">${logoHTML()}<small>social mesh</small></b>${T.headerToggles()}<span class="who">Let's set you up</span></header><main id="view"></main>`; T.wireHeader(app); return onboard($('#view')); }
-  bootP2P(id);
+  step('p2p'); try { bootP2P(id); } catch (e) { console.warn('p2p boot', e); }
+  step('app');
   if (!noticeShown) { noticeShown = true; import('./settings-ui.js').then(async S => noticeBanner(await blockedReason(await S.getVault()))); }
   if ((!mesh() || mesh().asKey !== p.id) && joiningAs !== p.id && !killState()) {
     joiningAs = p.id;
@@ -426,5 +427,6 @@ render = async function () {
   }
   return _render();
 };
-render();
-if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('/sw.js');
+render().catch(e => { globalThis.__cmBootFail?.(e); console.error('boot', e); });
+// SW is optional: in-app webviews may reject registration (or lack navigator.serviceWorker entirely).
+try { if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('/sw.js').catch(e => console.warn('sw register', e)); } catch (e) { console.warn('sw', e); }
