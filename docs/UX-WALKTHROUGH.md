@@ -84,3 +84,25 @@
 - Swipe left = disconnect; swipe right = want to talk.
 - People round-robin in and out while discovering.
 - Background "tentacles" continuously connect/disconnect to other nodes, seeking profiles that match better than the lowest-matching members of the user's current clump, then pull those higher-match nodes in (replacing the weakest) so they join the collective.
+
+## 8. The living mesh (core loop for everything)
+- NOT like X's algorithm discovery.
+- On connect, a node blasts out its presence, and keeps doing so: broadcasting only once would leave it stuck where it first landed. Nodes must constantly move.
+- Each node holds many connections to other nodes (bucket of ~200 highest-match people), and those connections are always shifting and changing.
+- Swipe left rejects someone and throws them off your network.
+- Because like-minded people are already clustered in the same "nest in the ether", search responses come back much faster, regardless of physical distance (they may be very far apart).
+- Searching for more hops into neighboring clusters' buckets and checks them all.
+
+### Broadcast efficiency
+- Staggered broadcasting: each node gets a random offset so broadcasts don't fire on the same beat.
+- Adaptive interval: quiet when connections are stable, faster when matches are shifting.
+- Piggyback profile data onto existing traffic where possible.
+- Smallest possible connection packet: profile answers consolidated into compact "soft numbers" (soft-percentage vector) for quick comparison during discovery.
+- Full detailed profile exchanged only after a real connection forms.
+- Clarification: during discovery only the tiny soft-tag packet circulates (sports, gamer, religious or not, has job, etc.). The full detailed profile (all logic-heavy comparison data) is requested and sent only at the moment a user taps to view that person's profile.
+- Opening a profile shows a small "Loading their profile..." screen; during it the app also checks whether that person is currently online. Should not feel laggy since only the full profile travels at that point.
+
+## 9. Sending messages
+- Messages that successfully get through are delivered and held (existing 7-day hold for offline recipients stays).
+- Any message that fails to deliver because the recipient has gone offline (no response to the send check) does NOT appear in their message box; the sender is told "they logged off to mesh" and any boost is refunded.
+- Applies to every failed message, not just first or boosted ones.
