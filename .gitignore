@@ -1,0 +1,12 @@
+node_modules/
+.env*
+*.pem
+*.key
+*.jks
+*.keystore
+dist/
+dist-*/
+android/local.properties
+android/app/build/
+android/.gradle/
+cybermates-secrets/
