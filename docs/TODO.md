@@ -5,7 +5,7 @@ Priority: P0 = blocks any real launch, P1 = must fix before public beta, P2 = be
 - [x] 48h wording → three-bubble retention model (Step 1, smoke-legal asserts no 48-hour claim).
 - [x] Test harness: imported suites only run inside smoke.mjs; `npm run regress` added (ALL PASS).
 - [x] Colors: arcade/match code uses theme tokens only (fallbacks in theme.js THEME_FALLBACK; test added).
-- [ ] P1 Brawler: 6-player FFA, tap teleport/punch, hold-charge blast, early release energy ball, full-charge beam, knockback, health bars, instant respawn, short-round scoreboard, neon glass bloom + speed lines + shake (off with reduced motion), theme colors, AI fill, victim-resolves hits with signed inputs, Brawl tab; original characters only.
+- [x] P1 Brawler (done 2026-10-21; networked multi-human brawl over the mesh still to wire, solo + AI works): 6-player FFA, tap teleport/punch, hold-charge blast, early release energy ball, full-charge beam, knockback, health bars, instant respawn, short-round scoreboard, neon glass bloom + speed lines + shake (off with reduced motion), theme colors, AI fill, victim-resolves hits with signed inputs, Brawl tab; original characters only.
 - [ ] P2 Proximity voice: gain/range/UI done, per-peer audio transport not wired (`ProximityVoice.connect`).
 - [ ] P2 Store/plans internal 48h TTL constants (store.js CHAT_TTL_MS, mesh.js PLAN_TTL_MS) should follow the chosen retention bubble once "saving based on that choice" ships.
 
