@@ -34,3 +34,15 @@ Priority: P0 = blocks any real launch, P1 = must fix before public beta, P2 = be
 ## 5. Pending from David
 - [ ] Theme picks: 13 candidates in /workspace/cybermates-themes/list.txt (Midnight Ink, Carbon, Daylight Chrome, Paper Neon, Sunset Grid, Outrun, Arcade, Arctic, Gold Luxe, Toxic Waste, Ocean Deep, Sakura, Amber CRT), preview.png; current app has 11 themes.
 - [ ] Approve "Planned (awaiting approval)" items in README: onion relay rotation, reverse-path failure refunds, full US-only enforcement (VPN detection), broadcast discovery vectors, DoS cheap shield.
+
+## Build queue (after Snake + Tron analog release, 2026-10-21)
+- [ ] All games true 3D only (remove 2D/3D toggle; silent 2D fallback only without WebGL): Snake Battle, Star Fleet, Ultimate TTT, Trivia, Draw & Guess (3D glass easel), etc.
+- [ ] Fullscreen on/off button in every game (Fullscreen API + webkit prefix; iOS fallback = CSS immersive mode hiding app chrome).
+- [ ] UTTT: accurate raycast picking against cell meshes (DPR/canvas offset), hover/press highlight, test tapping every cell centre.
+- [ ] Chess/checkers: smoky-black vs frosted-white glass pieces AND board squares, theme colour as rim/edge glow (implemented in board3d.js, shipped with the analog release; visual check pending).
+- [ ] Distinct synthesized SFX per game (moves, captures, hits, boosts, torpedo/explosions, sensor ping, daub, correct/wrong, countdown, win/lose, respawn); respect mute + tap-to-resume; no music on gates.
+- [ ] Mood picker at first login/JACK IN as a <select>; show mood badge next to name (header/profile) and on inbox/discovery cards.
+- [ ] Same-theme colour collisions: first player gets the pure theme colour, others deterministic distinct shades in the hue family (OKLCH spread, min deltaE), up to 100; unit test with 100 same-theme players.
+- [ ] Re-accept acknowledgement/terms on every new app version (store accepted version; show gate before JACK IN on change) + test.
+- [ ] 'Read to me' button at the top of the acknowledgement screen (speechSynthesis, stop/pause, starts on tap) + test.
+- [ ] Earlier queue: 3D models for the other games, Bingo (mass), regular tic-tac-toe, mass Trivia, global voice for party games, full perf fixes.
