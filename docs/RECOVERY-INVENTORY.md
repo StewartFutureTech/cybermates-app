@@ -75,3 +75,8 @@ Fail: smoke-gate ("web dev toggle: simulated emulator blocked"); smoke-legal, sm
 
 ## Log
 - 2026-10-21 01:23 CDT: archive of box base pushed (commit d747fc8).
+
+### Correction (01:30 CDT)
+The 5 "failing" suites (gate, legal, p2p, secure, wallet) are submodules imported by `scripts/smoke.mjs` (which supplies the localStorage shim); they are not standalone. Inside smoke.mjs all pass. Added `npm run regress` (scripts/regress.sh) = build:all + smoke.mjs + all standalone suites.
+
+- 2026-10-21 Step 1 (48h wording + regression runner): terms.js, help-kb.md, mesh-ui.js (Plans note), mesh.js comment, README rewritten to the three-bubble model + under-18 always kept; TERMS_VERSION stays 2026-10-20.3 (per David). smoke-legal now asserts no 48-hour claim in terms/help/UI/README and the three bubbles. Regression: ALL PASS (smoke.mjs 481 ok). Note: internal TTL constants (store.js CHAT_TTL_MS, mesh.js PLAN_TTL_MS = 48h) still exist in code; no user-facing text promises them.

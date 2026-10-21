@@ -1,0 +1,42 @@
+// Legal fixes smoke (items 3–6).
+import * as C from '../src/compliance.js';
+import * as V from '../src/vault.js';
+import { PUBLIC_FIELDS } from '../src/app-mesh.js';
+import { TERMS, TERMS_VERSION } from '../src/terms.js';
+import { readFileSync } from 'node:fs';
+const assert = (c, m) => { if (!c) { console.error('FAIL', m); process.exit(1); } console.log('ok', m); };
+const now = new Date('2026-10-17T12:00:00');
+assert(C.checkAge('2008-10-17', now).ok && !C.checkAge('2008-10-18', now).ok, 'age gate: 18th birthday boundary');
+assert(C.checkAge('2010-01-01', now).reason === 'under-18' && C.checkAge('', now).reason === 'invalid' && C.checkAge('1800-01-01', now).reason === 'invalid', 'age gate: under-18 blocked, invalid rejected');
+let saved = null; const v = new V.Vault({ store: new V.MemorySecretStore(), persist: { load: async () => saved, save: async b => { saved = b; } }, info: 'x|y|web' });
+await v.init({ userCode: 'ABCDEFGHJK' });
+await C.recordAge(v, C.checkAge('2012-02-02', now)); assert((await C.ageStatus(v)).adult === false, 'under-18 flag persisted (stays blocked)');
+await C.recordAge(v, C.checkAge('1990-02-02', now)); const ag = await C.ageStatus(v); assert(ag.adult && !JSON.stringify(await v.read()).includes('1990'), 'only adult flag stored, never DOB');
+assert(C.ukAgeAssurance('GB').required && !C.ukAgeAssurance('US').required, 'UK age-assurance placeholder');
+for (const [r, s] of [['New Jersey', 'NJ'], ['IL', 'IL'], ['texas', 'TX'], ['NY', 'NY']]) assert(C.safetyNoticeFor({ countryCode: 'US', region: r })?.startsWith(C.DATING_SAFETY[s].slice(0, 8)), 'dating-safety notice ' + s);
+assert(C.safetyNoticeFor({ countryCode: 'US', region: 'CA' }) === null && C.safetyNoticeFor({ countryCode: 'GB', region: 'NJ' }) === null, 'no notice elsewhere');
+assert(!PUBLIC_FIELDS.some(f => C.SENSITIVE_FIELDS.includes(f)), 'religion/orientation not in mesh public fields');
+const s = C.stripSensitive({ name: 'a', religion: 'x', orientation: 'y', sensitiveOptIn: true }); assert(s.name === 'a' && !('religion' in s) && !('orientation' in s) && !('sensitiveOptIn' in s), 'stripSensitive');
+assert(C.orientationRisk('ng') && !C.orientationRisk('US'), 'criminalizing-country warning config');
+const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+assert(/k: 'orientation'[^}]*sensitiveOptIn/.test(main) && /k: 'religion'[^}]*sensitiveOptIn/.test(main), 'sensitive fields hidden unless opted in');
+assert(!/esc\(p\.religion\)\s*·/.test(main) && main.includes('p.showSensitive && p.religion'), 'religion not shown on discover cards by default');
+assert(!/religion|orientation/.test(readFileSync(new URL('../src/voice-session.js', import.meta.url), 'utf8')), 'voice session sends no sensitive fields');
+await C.voiceConsent(v, 'free'); assert(await C.hasVoiceConsent(v, 'free') && !(await C.hasVoiceConsent(v, 'grok')), 'voice consent recorded per kind');
+assert(C.VOICE_DISCLOSURE_GROK.includes('AI') && C.VOICE_DISCLOSURE_GROK.includes('Zero Data Retention') && /voiceprint/.test(C.VOICE_DISCLOSURE_FREE), 'AI disclosure + ZDR + no voiceprint text');
+assert(main.includes("hasVoiceConsent(vv, 'free')") && main.includes("hasVoiceConsent(vv, 'grok')"), 'consent checked before mic and Grok session');
+assert(readFileSync(new URL('../api/voice-session.js', import.meta.url), 'utf8').includes('Zero Data Retention'), 'ZDR noted in voice-session stub');
+const rep = C.buildReport({ reporter: 'AAAA', reported: 'BBBB', reason: 'harassment', excerpt: 'x'.repeat(5000) }); assert(rep.excerpt.length === 1000, 'report excerpt capped');
+let threw = false; try { C.buildReport({ reporter: 'a', reported: 'b', reason: 'nope' }); } catch { threw = true; } assert(threw, 'report reason validated');
+const q = await C.submitReport({ reporter: 'A', reported: 'B', reason: 'spam/scam' }, {}); assert(q.queued && JSON.parse(localStorage.getItem('cybermates:pending-reports')).length === 1, 'report queued without server');
+let sent; const r2 = await C.submitReport({ reporter: 'A', reported: 'B', reason: 'other' }, { VITE_SUPABASE_URL: 'https://x.supabase.co', VITE_SUPABASE_ANON_KEY: 'k' }, async (u, o) => { sent = { u, o }; return { ok: true, status: 201 }; });
+assert(r2.ok && sent.u.endsWith('/rest/v1/reports') && JSON.parse(sent.o.body).reported_code === 'B', 'report POSTs to reports table');
+const ui = readFileSync(new URL('../src/mesh-ui.js', import.meta.url), 'utf8'); assert(ui.includes('data-mreport') && ui.includes('id="mrep"'), 'report buttons on profiles + chats');
+assert(TERMS_VERSION === '2026-10-20.3' && !TERMS.join(' ').match(/48[ -]?h(ou)?r?s?\b|48h/i) && TERMS.join(' ').includes('Hide instantly, kept 7 days for safety reports') && TERMS.some(t => t.includes(C.SAFETY_CONTACT)), 'terms carry safety contact (re-prompt)');
+assert(readFileSync(new URL('../docs/trust-safety.md', import.meta.url), 'utf8').includes('CyberTipline'), 'CSAM escalation doc');
+
+{ const files = ['src/terms.js','src/help.js','src/mesh-ui.js','src/inbox-ui.js','src/settings-ui.js','src/compliance.js','docs/help-kb.md','README.md'];
+  const bad = files.filter(f => /(48[ -]?h(ou)?rs?\b|48h)/i.test(readFileSync(new URL('../' + f, import.meta.url), 'utf8')));
+  assert(bad.length === 0, 'no 48 hour clear/expire claim in user-facing text (' + bad.join(',') + ')');
+  const all = TERMS.join(' ') + readFileSync(new URL('../docs/help-kb.md', import.meta.url), 'utf8');
+  assert(['Keep forever', 'Keep for a while, plus 7-day safety copy', 'Hide instantly, kept 7 days for safety reports', 'Under-18 chats will always be kept'].every(x => all.includes(x)), 'retention model: three bubbles + under-18 always kept'); }
