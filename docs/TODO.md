@@ -62,3 +62,11 @@ Priority: P0 = blocks any real launch, P1 = must fix before public beta, P2 = be
 - [ ] REMOVE CM_FTUE_RESET build flag and ?ftue=reset; restore once-only first-time flows (age gate, terms per version stays, mood, loss warning cadence)
 - [ ] Patch remaining browser scripts for #losswarn if any still click through terms by other means
 - [ ] Launch: advertise parent controls on social
+
+## Item (c) — 3D-only
+- [x] 2D/3D toggles removed everywhere (mass, duels, Brawl); 2D canvas only as silent no-WebGL fallback
+- [x] Ultimate TTT: true 3D grid (grid3d.js), raycast picking on instanced cells, hover/press feedback, all-81-cell test
+- [x] Star Fleet: true 3D twin grids, ships/hit/miss meshes, raycast fire, all-200-cell test
+- [x] Trivia Clash: 3D holo question panel + answer pads (raycast)
+- [x] Draw & Guess: 3D easel with raycast drawing (UV → same stroke format)
+- [x] Snake Battle / Tron Duel 3D-only; duel 2D render skipped while 3D is active (Tron Duel perf)
