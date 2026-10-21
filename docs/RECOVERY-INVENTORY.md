@@ -57,7 +57,7 @@ Legend: ✅ present · 🟡 partial/verify · ❌ missing. Live Vercel has only 
 | Trivia Clash | ✅ | games/trivia.js |
 | Draw & Guess (Mass Arena) | ✅ | games/drawguess.js |
 | Mega Fleet (Mass Arena) | ✅ | arcade/megaship.js; smoke-megaship OK |
-| **Brawler (6-player FFA, original characters)** | ❌ | not present anywhere (box, backups, Vercel) |
+| Brawler (6-player FFA, original characters) | ✅ rebuilt 2026-10-21 | src/arcade/games/brawl.js, src/arcade/brawl3d.js, src/brawl-ui.js, Brawl tab; scripts/smoke-brawl.mjs, scripts/shots-brawl.mjs |
 | No hardcoded colors | 🟡 | 1 hex in arcade/engine.js, 2 in arcade/fx.js (likely fallbacks; audit) |
 
 ## Test baseline (box, after `npm ci`, `npm run build:all` = OK)
@@ -80,3 +80,6 @@ Fail: smoke-gate ("web dev toggle: simulated emulator blocked"); smoke-legal, sm
 The 5 "failing" suites (gate, legal, p2p, secure, wallet) are submodules imported by `scripts/smoke.mjs` (which supplies the localStorage shim); they are not standalone. Inside smoke.mjs all pass. Added `npm run regress` (scripts/regress.sh) = build:all + smoke.mjs + all standalone suites.
 
 - 2026-10-21 Step 1 (48h wording + regression runner): terms.js, help-kb.md, mesh-ui.js (Plans note), mesh.js comment, README rewritten to the three-bubble model + under-18 always kept; TERMS_VERSION stays 2026-10-20.3 (per David). smoke-legal now asserts no 48-hour claim in terms/help/UI/README and the three bubbles. Regression: ALL PASS (smoke.mjs 481 ok). Note: internal TTL constants (store.js CHAT_TTL_MS, mesh.js PLAN_TTL_MS = 48h) still exist in code; no user-facing text promises them.
+- 2026-10-21 ~01:40 CDT: production deploy of the recovered build (David's request): dpl_CEjES3o7ivEsELr1SVH4PHsE9Kiq; rollback dpl_DnEq3hmJDyLJ6FwwxQAgGhfjt1RK. Live check: arcade, match games, roulette load with no page errors.
+- 2026-10-21 Step 3 (brawler): 6 original fighters, tap teleport/punch, hold charge, early-release ball, full-charge beam, knockback, HP bars, instant respawn + spawn shield, 75 s round + scoreboard + rematch, AI fill with PG taunts and "· AI" tag, signed human inputs, victim-signed hits (WebCrypto Ed25519 fast path, tweetnacl-compatible), 3D neon glass + bloom + speed lines + screen shake (off with reduced motion), 2D fallback, theme colours only. smoke-brawl 33 checks OK; regression ALL PASS; screenshots brawl-*.png.
+- 3D fallback log is console.warn with the message (was already warn; the earlier 'console:' lines came from the shots script's own logger, not console errors).

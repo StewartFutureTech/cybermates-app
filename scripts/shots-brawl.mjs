@@ -1,0 +1,31 @@
+// Brawl screenshots: npm run build && node scripts/shots-brawl.mjs [outdir]
+// 3D shots use SwiftShader WebGL2 in headless Chrome (&force3d=1 skips the low-end gate; the 2D fallback is shot too).
+import { spawn } from 'node:child_process'; import puppeteer from 'puppeteer-core';
+const OUT = process.argv[2] || '/workspace/cybermates-shots', PORT = Number(process.env.PORT || 4198), U = process.env.BASE || `http://localhost:${PORT}/`;
+let srv = { pid: 0 }; if (!process.env.BASE) { srv = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'pipe', detached: true }); srv.stderr.on('data', d => /in use/.test(d) && (console.error('FAIL preview port busy'), process.exit(1))); await new Promise(r => srv.stdout.on('data', d => /localhost/.test(d) && r())); }
+const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
+process.on('exit', () => { try { srv.pid && process.kill(-srv.pid); } catch {} }); process.on('unhandledRejection', e => { if (/closeTarget|Target closed/.test(e.message)) return; console.error('FAIL', e.message); process.exit(1); });
+const wait = ms => new Promise(r => setTimeout(r, ms)); let fail = 0; const errs = [];
+const click = (p, s) => p.$eval(s, e => e.click());
+async function page(q = '', ls = {}) { const p = await b.newPage(); await p.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true }); p.on('dialog', d => d.accept()); p.on('console', m => /3D fallback|WebGL/i.test(m.text()) && console.log('console:', m.text().slice(0, 200))); p.on('console', m => m.type() === 'error' && (errs.push('console.error: ' + m.text().slice(0, 160)), fail++)); p.on('pageerror', e => { errs.push(e.message); fail++; });
+  await p.evaluateOnNewDocument(o => { for (const [k, v] of Object.entries(o)) localStorage.setItem(k, v); localStorage.setItem('cm.sound', 'off'); }, ls);
+  await p.goto(U + '?loaderMin=0' + q); const ag = await p.waitForSelector('#ag-dob', { timeout: 6000 }).catch(() => null); if (ag) { await p.$eval('#ag-dob', e => e.value = '1995-05-05'); await click(p, '#ag-go'); }
+  const t = await p.waitForSelector('#tm-ok', { timeout: 4000 }).catch(() => null); if (t) { await click(p, '#tm-ok'); await click(p, '#tm-yes'); }
+  await p.waitForFunction(() => !document.getElementById('jackin') && document.querySelector('nav'), { timeout: 30000 }); await wait(1200); await p.evaluate(() => [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Skip')?.click()); await wait(300); return p; }
+
+const brawl = async (name, q, { ls = {}, ms = 2500, act = null, reduced = false } = {}) => { const pg = await page('&' + q, ls); if (reduced) await pg.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+  const tab = await pg.$('nav [data-tab=brawl]'); if (!tab) { console.log('FAIL Brawl tab missing'); fail++; return pg; } await click(pg, 'nav [data-tab=brawl]'); await pg.waitForSelector('#br-hud .br-row', { timeout: 10000 }); await wait(ms); if (act) await act(pg);
+  await pg.$eval('.br-stage', e => e.scrollIntoView({ block: 'start' })); await wait(250); await pg.screenshot({ path: `${OUT}/${name}.png` }); console.log('shot', name); return pg; };
+const tapAt = async (pg, fx, fy, hold = 0) => { const r = await pg.evaluate(() => { const c = [...document.querySelectorAll('.br-stage canvas')].find(x => !x.hidden); const b = c.getBoundingClientRect(); return [b.left, b.top, b.width, b.height]; }); const x = r[0] + r[2] * fx, y = r[1] + r[3] * fy; await pg.mouse.move(x, y); await pg.mouse.down(); await wait(hold || 60); await pg.mouse.up(); };
+let pg = await brawl('brawl-3d', 'force3d=1', { ms: 5000 });
+const st3 = await pg.evaluate(() => ({ rows: document.querySelectorAll('#br-hud .br-row').length, ai: [...document.querySelectorAll('.br-nm')].filter(e => /· AI/.test(e.textContent)).length, on3d: !document.querySelector('#br-3d-cv').hidden }));
+console.log(st3.rows === 6 && st3.ai === 5 ? 'ok 6 HP bars, 5 AI fill seats tagged' : 'FAIL hud ' + JSON.stringify(st3)); if (!(st3.rows === 6 && st3.ai === 5)) fail++; console.log(st3.on3d ? 'ok brawl 3D view active' : 'note brawl 3D unavailable -> 2D'); await pg.close();
+pg = await brawl('brawl-action-3d', 'force3d=1', { ms: 2500, act: async p => { await tapAt(p, 0.5, 0.5); await wait(300); await tapAt(p, 0.2, 0.3, 1400); await wait(120); } }); await pg.close();
+pg = await brawl('brawl-2d', 'force3d=0', { ls: { 'cm.arc.3d': 'off' }, ms: 3000, act: async p => { await tapAt(p, 0.7, 0.4); await wait(200); await tapAt(p, 0.3, 0.6, 500); await wait(150); } });
+const moved = await pg.evaluate(() => document.querySelector('#br-time').textContent); console.log(/⏱/.test(moved) ? 'ok round timer running' : 'FAIL timer'); await pg.close();
+pg = await brawl('brawl-scoreboard', 'force3d=0&brawlround=6', { ls: { 'cm.arc.3d': 'off' }, ms: 8000 });
+const ov = await pg.evaluate(() => { const o = document.querySelector('#br-over'); return o && !o.hidden && o.querySelectorAll('tr').length; }); console.log(ov === 7 ? 'ok short round ends with a 6-row scoreboard + rematch' : 'FAIL scoreboard ' + ov); if (ov !== 7) fail++;
+await click(pg, '#br-again'); await wait(1500); const re = await pg.evaluate(() => document.querySelector('#br-over').hidden); console.log(re ? 'ok rematch restarts' : 'FAIL rematch'); if (!re) fail++; await pg.close();
+pg = await brawl('brawl-reduced-motion', 'force3d=1', { ms: 3500, reduced: true }); await pg.close();
+pg = await brawl('brawl-theme-pink', 'force3d=1', { ls: { 'cm.theme': 'pink' }, ms: 4000 }); await pg.close();
+await b.close(); try { srv.pid && process.kill(-srv.pid); } catch {} if (errs.length) console.log('page errors:', [...new Set(errs)].slice(0, 5).join(' | ')); console.log(fail ? 'BRAWL SHOTS FAIL ' + fail : 'brawl shots done'); process.exit(fail ? 1 : 0);
