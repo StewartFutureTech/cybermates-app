@@ -47,3 +47,18 @@ Priority: P0 = blocks any real launch, P1 = must fix before public beta, P2 = be
 - [ ] 'Read to me' button at the top of the acknowledgement screen (speechSynthesis, stop/pause, starts on tap) + test.
 - [ ] Earlier queue: 3D models for the other games, Bingo (mass), regular tic-tac-toe, mass Trivia, global voice for party games, full perf fixes.
 - [ ] Account-loss warning: show on first use, then remind about every 10 logins (login counter stored on the device). Periodic warning only; NO 'Read to me' button (that is only on the acknowledgement screen). + test.
+
+## Item (a) — shipped 2026-10-21
+- [x] UTTT picking fix (pick.js, board margin), hover/press highlight
+- [x] Mood dropdown + badges (header/inbox/friends)
+- [x] Same-theme distinct shades (OKLCH, 100 players tested)
+- [x] Terms re-accept every app version + Read to me (top of screen)
+- [x] Account-loss warning: first use, then every ~10 logins (no Read to me)
+- [x] Friends tab (replaces Brawl slot), inbox ordering (friends pinned, boost below friends)
+- [x] Minors: dating removed, roulette 18+, voice same age band only, features default ON with parent PIN controls
+- [x] Arcade/phone overflow fix (320–430 verified)
+
+## Production finalization
+- [ ] REMOVE CM_FTUE_RESET build flag and ?ftue=reset; restore once-only first-time flows (age gate, terms per version stays, mood, loss warning cadence)
+- [ ] Patch remaining browser scripts for #losswarn if any still click through terms by other means
+- [ ] Launch: advertise parent controls on social
