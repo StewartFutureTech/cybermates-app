@@ -70,3 +70,8 @@ Priority: P0 = blocks any real launch, P1 = must fix before public beta, P2 = be
 - [x] Trivia Clash: 3D holo question panel + answer pads (raycast)
 - [x] Draw & Guess: 3D easel with raycast drawing (UV → same stroke format)
 - [x] Snake Battle / Tron Duel 3D-only; duel 2D render skipped while 3D is active (Tron Duel perf)
+
+## Item (d) — per-game sound effects
+- [x] sfx.js LIB: 35 procedural effects (move/place/capture/drop/puck/goal/torpedo/explosion/splash/ping/laser/daub/correct/wrong/countdown/go/win/lose/respawn/punch/teleport/beam/KO/scribble…)
+- [x] game-audio.js: per-game watchers + pitch profiles (match games diff state; mass games use World events; Brawl events/fx)
+- [x] Mute, gate (no audio on DOB/terms) and tap-to-resume rules respected; tests smoke-sfx + shots-d
