@@ -1,0 +1,36 @@
+# Cybermates launch-readiness TODO (2026-10-21)
+Priority: P0 = blocks any real launch, P1 = must fix before public beta, P2 = before scale.
+
+## 1. Remaining build items (recovery)
+- [x] 48h wording → three-bubble retention model (Step 1, smoke-legal asserts no 48-hour claim).
+- [x] Test harness: imported suites only run inside smoke.mjs; `npm run regress` added (ALL PASS).
+- [x] Colors: arcade/match code uses theme tokens only (fallbacks in theme.js THEME_FALLBACK; test added).
+- [ ] P1 Brawler: 6-player FFA, tap teleport/punch, hold-charge blast, early release energy ball, full-charge beam, knockback, health bars, instant respawn, short-round scoreboard, neon glass bloom + speed lines + shake (off with reduced motion), theme colors, AI fill, victim-resolves hits with signed inputs, Brawl tab; original characters only.
+- [ ] P2 Proximity voice: gain/range/UI done, per-peer audio transport not wired (`ProximityVoice.connect`).
+- [ ] P2 Store/plans internal 48h TTL constants (store.js CHAT_TTL_MS, mesh.js PLAN_TTL_MS) should follow the chosen retention bubble once "saving based on that choice" ships.
+
+## 2. Blocked setup (needs David's accounts/keys)
+- [ ] P0 Supabase project: run supabase/schema.sql; set VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY (docs/SUPABASE-DAY-CHECKLIST.md).
+- [ ] P0 TURN provider (Cloudflare Calls/Twilio/coturn): VITE_TURN_URLS/USERNAME/CREDENTIAL. Calls, roulette video and P2P don't work live without it.
+- [ ] P0 Production kill key: generate offline with scripts/mod.mjs, set VITE_KILL_PUBKEY (the repo ships DEV_KILL_PUBKEY), plan for key loss/rotation.
+- [ ] P0 Stripe live: live keys, webhook secret, US-only cards; receipt signing seed.
+- [ ] P1 xAI key for Grok voice/help (server-side only, ZDR).
+- [ ] P1 Play Integrity (Android PlayIntegrity Capacitor plugin, TODO) + App Attest/DeviceCheck (iOS), verified server-side before bootstrap.
+
+## 3. Open review risks (docs from cybermates-review/REVIEW-2026-10-20.md, audit)
+- [ ] P0 CSAM reporting duty (18 U.S.C. §2258A): reconcile "media only on phones/auto-delete" with report evidence preservation + NCMEC CyberTipline process; §2703(f) preservation; real safety contact (placeholder today; Apple 1.2).
+- [ ] P0 Refund gaming: "no signed receipt ⇒ refund" invites fraud; make refunds server-side and conservative; wallet balances are client state.
+- [ ] P1 Per-instance rate limits: api/_lib/guard.js limiter is in-memory per Vercel instance; move to global storage (Upstash/Postgres) and gate join on attestation; Realtime per-user limits.
+- [ ] P0 ID spoofing / identity binding: ID key public and not bound to a signing key; web ID spoofable; bind code↔key, attestation join cost, PoW for web.
+- [ ] P1 Minors decision: app is 18+ but code has under-18 paths (parent PIN, minor voice separation, always-retained chats); pick one answer (COPPA/AADC).
+- [ ] P1 "Mesh/P2P" claims: traffic is Supabase broadcast; fix wording or build transport (FTC §5 deception risk). Remove false ✅ claims (spam detection doesn't exist).
+- [ ] P2 E2E: no forward secrecy; keys in IndexedDB not Keystore/Keychain; 6-digit transfer brute-forceable offline.
+
+## 4. Real-device testing
+- [ ] P0 Android build (Capacitor) on a physical phone: onboarding, emulator gate, audio resume, calls over TURN, roulette video, arcade performance (three.js bloom on low-end), proximity voice.
+- [ ] P0 iOS Safari/PWA: audio any-tap resume, no-flash, onboarding (scripts/ios-*.mjs are simulations only).
+- [ ] P1 Two-device mesh: accept-before-message, block, ban levels, kill switch, store-and-forward queue.
+
+## 5. Pending from David
+- [ ] Theme picks: 13 candidates in /workspace/cybermates-themes/list.txt (Midnight Ink, Carbon, Daylight Chrome, Paper Neon, Sunset Grid, Outrun, Arcade, Arctic, Gold Luxe, Toxic Waste, Ocean Deep, Sakura, Amber CRT), preview.png; current app has 11 themes.
+- [ ] Approve "Planned (awaiting approval)" items in README: onion relay rotation, reverse-path failure refunds, full US-only enforcement (VPN detection), broadcast discovery vectors, DoS cheap shield.
