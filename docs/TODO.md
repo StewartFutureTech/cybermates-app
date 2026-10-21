@@ -46,3 +46,4 @@ Priority: P0 = blocks any real launch, P1 = must fix before public beta, P2 = be
 - [ ] Re-accept acknowledgement/terms on every new app version (store accepted version; show gate before JACK IN on change) + test.
 - [ ] 'Read to me' button at the top of the acknowledgement screen (speechSynthesis, stop/pause, starts on tap) + test.
 - [ ] Earlier queue: 3D models for the other games, Bingo (mass), regular tic-tac-toe, mass Trivia, global voice for party games, full perf fixes.
+- [ ] Account-loss warning: show on first use, then remind about every 10 logins (login counter stored on the device). Periodic warning only; NO 'Read to me' button (that is only on the acknowledgement screen). + test.
