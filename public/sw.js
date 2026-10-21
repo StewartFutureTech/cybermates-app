@@ -1,4 +1,4 @@
-const C='cm-v17-2026-10-21';
+const C='cm-v18-2026-10-21';
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(C).then(c=>c.addAll(['/','/manifest.webmanifest','/icon.svg','/icon-192.png','/logo-mark.svg','/city-bg.jpg'])))});
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x)))).then(()=>self.clients.claim())));
 // Network first. Only successful same-origin responses are cached. The cached index is only ever a fallback for a
