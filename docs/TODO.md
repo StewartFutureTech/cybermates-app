@@ -75,3 +75,28 @@ Priority: P0 = blocks any real launch, P1 = must fix before public beta, P2 = be
 - [x] sfx.js LIB: 35 procedural effects (move/place/capture/drop/puck/goal/torpedo/explosion/splash/ping/laser/daub/correct/wrong/countdown/go/win/lose/respawn/punch/teleport/beam/KO/scribble…)
 - [x] game-audio.js: per-game watchers + pitch profiles (match games diff state; mass games use World events; Brawl events/fx)
 - [x] Mute, gate (no audio on DOB/terms) and tap-to-resume rules respected; tests smoke-sfx + shots-d
+
+## cm-v32 (2026-10-21, built, not deployed)
+- [x] UX §2 acknowledgement: Accept needs scroll-to-end AND minimum timer (sized to read-aloud length, clamped 20-30 s; full terms = 30 s) AND the tick box; visible countdown ring + 3-step checklist + "Accept (Ns)" label; Read to me stays at the very top; reduced motion = static ring; re-accept on every app version (ACCEPT_ID = terms@build; sw cache cm-v32).
+- [x] UX §2.5 forced profile: onboarding "Start matching" is blocked until missingProfile() is empty (jumps to the first missing step with a notice); existing incomplete profiles stay locked to Profile.
+- [x] UX §3 starter characters offered in the onboarding photo step (6 glass presets) and used as the avatar when no photo; >4 photos: extras stay on the phone, notice shown (toast + persistent line), shown window rotates each login (PH.rotate wired at boot).
+- Tests: smoke-ux (+8), smoke-ui (+2), new scripts/shots-ack.mjs (real 30 s timer, 320/360/390/430 px, reduced motion, onboarding block, nav lock, rolling photos) added to regress.
+
+## cm-v33 (2026-10-21, built, not deployed)
+- [x] UX §5 per-mode weights: Gaming now scores gaming fields only (interests weight 0); Friends/Dating unchanged; religion full in Dating, low in Friends, ~0 in Gaming/online.
+- [x] Soft vs hard compare is a per-mode user setting (defaults Dating hard, Friends soft, Gaming hard); soft compare for interests/events now means "any shared item" instead of "both have any" (was always 100%).
+- [x] Deal breakers: on/off toggle per field + optional "only match people who are…" accept bubbles (shown when the toggle is on; nothing picked = must match own answer). A deal breaker with no criteria no longer blocks everyone. Deal breakers on fields a mode ignores have no effect in that mode.
+- [x] Hidden / "don't answer" fields vs the other side's deal breaker: never a block, silent 35% penalty per field (compounds), no reason exposed; hidden values never leave the phone (packet carries only the key).
+- [x] Per-mode age ranges (Dating / Friends / Gaming) clamped into the user's own band (adult 18-99, minor 13-17), swapped if reversed, mutual; onboarding dating range (ageMin/ageMax) kept in sync with ageRanges.dating.
+- [x] Per-mode minimum match % (defaults 50/40/40) now always applied in Discover (before: only if set); Discover uses MV.discoverList (legacy shared-items/distance + v2 score, both must allow).
+- [x] Dating-only fields (who you date, dating age range/min %/compare, budget) shown only while Dating is enabled; toggling Dating hides/shows them live and syncs with "What are you here for"; dating range not sent in the match packet while Dating is off.
+- [x] Discover match bar per mode (ages, min %, compare, Edit); gender filter chips ("Show me") appear in Dating only.
+- [x] Minors: legacy evaluate no longer drops every under-18 user (minors' Discover was empty) - minors match minors only, never adults, never Dating; minor ranges capped at 17; no Dating toggle/fields; no Roulette tab.
+- [x] Profile form novalidate: out-of-range ages are clamped on save instead of a silent browser block.
+- [x] sw cache cm-v33. Tests: new scripts/smoke-matchprefs.mjs (46 checks), new scripts/shots-match.mjs (43 checks, 320/360/390/430 px + minor) in regress; screenshots /workspace/cybermates-shots/v33-match/.
+- [ ] Open: mesh search (livemesh.search) is not yet called with the per-mode min % from the UI; gender in soft tags is one letter (Trans man/Trans woman collide) - fine for now, revisit with the mesh server.
+
+## cm-v34 (2026-10-22)
+- [x] Hidden / blank / "don't answer" field vs the viewer's deal breaker: compounding x0.75 per field (80 -> 60 -> 45), replaces flat 35%; score never reaches 0. Tests in smoke-matchprefs.
+- [x] docs/UX-WALKTHROUGH.md: 'documentation only' header removed (David approved building from it).
+- [x] sw cache cm-v34.

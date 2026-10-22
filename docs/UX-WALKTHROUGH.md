@@ -1,4 +1,4 @@
-# Cybermates UX walkthrough (dictated by David, 2026-10-21) - DOCUMENTATION ONLY, do not implement yet
+# Cybermates UX walkthrough (dictated by David, 2026-10-21)
 
 ## 1. Discovery & install
 - User finds the app via App Store, Google Play, or a social media link (X etc.) with instructions.
@@ -56,7 +56,7 @@
 
 ### Hidden fields vs deal breakers (chosen: "sneaky way")
 - A field a user hides is never a hard deal-breaker block for them.
-- If the other person marked that field as a deal breaker, the hidden field silently applies a significant penalty to the match percentage instead of a full block.
+- If the other person marked that field as a deal breaker, the hidden field silently applies a significant penalty to the match percentage instead of a full block: each such field multiplies the score by 0.75, compounding (80 -> 60 -> 45); blank and "I don't want to answer" count the same, and the score never reaches 0.
 - No indication to either party of why the score dropped.
 - Chosen over the clean "hidden means hidden / no effect" approach.
 
