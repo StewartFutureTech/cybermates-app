@@ -219,3 +219,4 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   return cur;
 }
 globalThis.__cmMesh = mesh; // test hook (read-only access for E2E)
+if (import.meta.env?.MODE === 'admin' || import.meta.env?.DEV) globalThis.__cmVoiceLab = () => import('./voice-lab.js'); // v44 proximity-voice e2e hook (admin/dev builds only)
