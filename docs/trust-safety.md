@@ -28,6 +28,10 @@ Religion/orientation: opt-in only, on-device only, never sent to server/analytic
 ## Voice
 Explicit consent + AI disclosure before any mic use; audio transcribed then discarded, never stored; no voiceprints; Grok voice requires xAI Zero Data Retention (see `api/_fn/voice-session.js`). Typed setup is always free.
 
+## Proximity voice links (v44)
+- Arcade proximity voice opens a direct audio link only between two players of the **same age band** who are inside each other's range (nearest 8). Both sides check, and the receiver refuses any offer it doesn't want. An adult can never open or hold an audio link to a minor, even with a modified app that lies about bands, because the receiver checks the band it knows.
+- Blocked and muted players never connect, and muting or blocking closes the live link on both sides at once. Minors still need the parent toggle. Talk is push-to-talk with the 10 s turn / 10 s-per-minute limits, enforced by the listener too. No audio goes through a server (a TURN relay, once configured, only forwards encrypted SRTP), and nothing is recorded.
+
 ## ID ↔ key binding (v43)
 - Every public ID is bound to one signing key. Peers and the bootstrap server refuse a key that isn't the one the ID is bound to, so nobody can take over someone else's ID in pings, adverts, presence, logoff or account deletion. The server's presence row also feeds boost-refund receipt checks, so those can't be redirected either.
 - New IDs pay a one-time proof of work (the web join cost), which slows mass creation of throwaway IDs for ban evasion or floods. It doesn't stop it; real attestation (Play Integrity / App Attest) is the stronger fix and is still a hook.
