@@ -393,6 +393,12 @@ Two games, **Snake** (eat nodes, grow, eat other snakes' segments, head-on kills
 - Bot simulation is deterministic (the seeded RNG drives bots), so bots cost no bandwidth. Bot state does diverge if peers miss inputs. A periodic snapshot or checksum from the tile owner is **not built yet**.
 - All peers on a sub-map receive every input broadcast. At a cap of 50 that is fine; it would not scale to 200, which is one reason for the 50 cap.
 
+### Networked Brawl (v42) — `src/arcade/brawl-net.js`
+- Brawl (6-player FFA) now plays with several humans over the mesh, on the same host-rotation + join-anytime layer as the match games (`hostrot-net.js`). Picking Brawl drops you into a running Brawl table in your age band if one is advertised (it takes an AI seat at once); otherwise your own table is advertised and others drop in. Two solo tables merge into the lower id.
+- **Host authority:** the rotation host runs the real sim (AI seats, physics, hit proposals) and streams compact signed snapshots ('bs', 10 Hz). Other humans predict locally and send signed inputs ('bi'); hits on a remote human are still signed by that human ('bh') and the host only applies hits it actually proposed. Host leaves -> planned hand-off; host crash -> failover from the freshest snapshot; a player who leaves or vanishes is replaced by an AI.
+- **Bounds:** snapshot <= 4 KB, input <= 400 B, hit <= 600 B, per-sender buckets (15 inputs/s, 30 hits/s), ~28 msgs/s/sender max, all under the RxGate budget.
+- Gameplay, visuals, glass/glow, sound and fullscreen are unchanged; players sharing a theme get distinct shades. Tests: `scripts/smoke-brawlnet.mjs`, `scripts/e2e-brawlnet.mjs`.
+
 ## Proximity voice (arcade) — `src/arcade/proximity.js`
 - You hear players **inside your own viewport** (32×24 cells around you), with linear distance falloff (`gainFor`). Nobody off-screen is heard.
 - **Default OFF for everyone.** For **minors** it stays locked until a parent enables *Arcade proximity voice* in 👪 parent controls (PIN). The change is written to the parent log, and older stored settings without the key default to OFF.
