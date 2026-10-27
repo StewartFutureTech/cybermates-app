@@ -27,3 +27,9 @@ Religion/orientation: opt-in only, on-device only, never sent to server/analytic
 
 ## Voice
 Explicit consent + AI disclosure before any mic use; audio transcribed then discarded, never stored; no voiceprints; Grok voice requires xAI Zero Data Retention (see `api/_fn/voice-session.js`). Typed setup is always free.
+
+## ID ↔ key binding (v43)
+- Every public ID is bound to one signing key. Peers and the bootstrap server refuse a key that isn't the one the ID is bound to, so nobody can take over someone else's ID in pings, adverts, presence, logoff or account deletion. The server's presence row also feeds boost-refund receipt checks, so those can't be redirected either.
+- New IDs pay a one-time proof of work (the web join cost), which slows mass creation of throwaway IDs for ban evasion or floods. It doesn't stop it; real attestation (Play Integrity / App Attest) is the stronger fix and is still a hook.
+- Reinstall on the same phone (same ID, new key): the old binding frees up after 14 days of silence, and the new install pays a heavier proof of work. Support can also rotate a binding if the user still has the old key. David decides the idle window.
+
