@@ -26,7 +26,9 @@ import { getMood, setMood as setMoodMem, clearMood } from './mood.js';
 import { ConnCap } from './conncap.js';
 import { Cooldown, Roulette, receiverAccept, isAdult } from './roulette.js';
 import { matchPacket } from './match-v2.js';
-import { LiveNode, powerLevel } from './livemesh.js'; // UX §6-8 living mesh: bucket, soft-tag presence, tentacles, search, tap-to-open // UX §5 compact match packet (visible answers only)
+import { LiveNode, powerLevel, decodeVec } from './livemesh.js'; // UX §6-8 living mesh: bucket, soft-tag presence, tentacles, search, tap-to-open // UX §5 compact match packet (visible answers only)
+import { RxGate } from './shield.js'; // v38: DoS cheap shield on the live receive path
+import { BDiscWire } from './bdisc.js'; // v38: broadcast discovery (anonymous soft-tag search) on the live receive path
 export const PUBLIC_FIELDS = ['name', 'age', 'gender', 'city', 'countryCode', 'bio', 'games', 'lookingFor', 'interests', 'avatarHue', 'thumb', 'test'];
 class BusRendezvous { constructor() { this.known = new Map(); } seen(c) { this.known.set(c, Date.now()); } seeds(shard, ex) { return [...this.known].filter(([c, t]) => c !== ex && Date.now() - t < 10 * 60e3).slice(-3).map(([c]) => c); } register() {} checkIn() {} }
 let cur = null;
@@ -64,7 +66,10 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
     e2e.seal(env).then(sealed => { const r = router.route(sealed, env.id); bus.post(r.pkt); if (r.via) changed('relay path', r.via.length, 'hops'); }).catch(e => changed('send refused', e.code || e.message));
   }
   const passedSet = new Set(); // swiped-left nodes (this session)
-  node.on_disc = (from, b) => { if (DISC.shouldAnswer(me, b)) node.send(from, 'disc-ans', { mode: b.mode, sp: node.myProfile, pub: node.keys.pub }); };
+  // v38: legacy 'disc' (query carrying the sender ID, answered with the FULL signed profile) is retired: discovery is now
+  // bdisc (anonymous query, sealed soft-tag answer, see BDiscWire below). Legacy queries from older clients get no answer,
+  // so a full profile never leaves this phone except on tap (livemesh pget -> pfull).
+  node.on_disc = () => {};
   node['on_disc-ans'] = (from, b) => { if (passedSet.has(from)) return; if (b?.mode === node.discMode && DISC.acceptVector(me, b.mode, b.sp?.profile)) { node._live(from, b.sp, b.pub); changed(); } };
   let inq = Promise.resolve(); // inbound envelopes are opened IN ARRIVAL ORDER (async AES must not reorder e.g. a late answer after 'bye')
   const inbound = env => (inq = inq.then(() => e2e.open(env)).then(o => { if (!o) return;
@@ -79,8 +84,22 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   member.banlist = bl; member.onBanList = () => { bl.save(v).catch(() => {}); changed('ban list', bl.hash()); };
   const kick = c => { const e = bl.entry(c); if (!e || Date.now() - (kicked.get(c) || 0) < 60e3) return; kicked.set(c, Date.now()); node.presence.delete(c); node.live.delete(c); node.cache.delete(c); bus.post({ k: 'ctl', msg: e, src: 'ban-list' }); changed('refused banned', c); };
   member.onBan = kick;
+  // v38 CHEAP SHIELD on the live receive path (src/shield.js RxGate): relevance filter -> shape/size cap -> per-sender /
+  // game / stranger / anonymous budgets, all BEFORE unpack, signature verify (e2e.open) or decrypt. Packets for other
+  // phones on the shared channel are ignored first, so they never count against anyone.
+  let liveRef = null, bdw = null;
+  const rxGate = new RxGate({ isKnown: c => node.friends.has(c) || e2e.peers.has(c) || node.presence.has(c) || !!liveRef?.bucket.has(c), onStrike: s => changed('shield: flood dropped from', s.code, '(' + s.count + ')') });
+  const rxMeta = m => { if (!m || typeof m !== 'object') return { sender: null };
+    if (m.k === 'mesh') { const e = m.env; if (!e || e.from === id.code || (e.to !== id.code && e.to !== '*')) return null; return { sender: e.from, game: e.to === '*' && e.type === 'arc' }; }
+    if (m.k === 'mem') return m.to === id.code ? { sender: null } : null;
+    if (m.k === 'onion') return m.hop === id.code ? { sender: null } : null;
+    if (m.k === 'hello') return m.code === id.code ? null : { sender: m.code };
+    if (m.k === 'bdisc-ans') return bdw?.pending.has(m.id) ? { sender: null } : null; // not my query: dropped for free
+    return { sender: null }; };
   bus.on(msg => {
-    if (!msg) return;
+    if (!msg) return; { const meta = rxMeta(msg); if (!meta || !rxGate.admit(msg, meta).ok) return; }
+    if (msg.k === 'bdisc') { if (msg.q) bdw?.onQuery(msg.q); return; } // anonymous query: maybe a sealed soft-tag answer (staggered)
+    if (msg.k === 'bdisc-ans') { if (bdw?.onAnswer(msg)) changed('bdisc hit'); return; } // only the searcher can open it
     if (msg.k === 'ctl' && msg.msg?.nonce) { if (fwd.has(msg.msg.nonce)) return; fwd.add(msg.msg.nonce); // signed kill/ban/clear gossip: verify, forward once if the signature is valid, then apply
       if (/^user:/.test(msg.msg.scope || '')) member.mergeBans([msg.msg]).catch(() => {}); // signed ban/lift entries join the gossiped ban list
       verifySig(msg.msg).then(okSig => { if (okSig) try { bus.post(msg); } catch {} return Promise.all(myCodes.map(c => applyControl(msg.msg, { code: c, vault: v, mesh: cur, onNotice, source: msg.src === 'ban-list' ? 'record' : 'broadcast' }))).then(rs => rs.find(r => r.applied) || rs[0]); }).then(r => changed('control', msg.msg.type, msg.msg.scope, r.applied || r.reason)).catch(() => {}); return; }
@@ -101,7 +120,8 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   // LIVING MESH (src/livemesh.js) rides E2E 'lm' envelopes (receiver-gated in LiveNode: band, block, ban, signature, rate).
   const live = new LiveNode({ code: id.code, keys: id.keys, profile: pub, full: pub, send: (to, m) => node.send(to, 'lm', m), isBanned: c => bl.isBanned(c), isBlocked: c => blocks.isBlocked(c) || node.blocked.has(c),
     isOnline: c => c === id.code || node.isOnline(c), rendezvous: () => [...node.presence.keys()].filter(c => c !== id.code && node.isOnline(c)).sort(() => Math.random() - .5).slice(0, 4), onEvent: (...e) => changed('live', ...e) });
-  node.on_lm = (from, b) => live.receive(from, b);
+  node.on_lm = (from, b) => live.receive(from, b); liveRef = live;
+  bdw = new BDiscWire({ post: m => { try { bus.post(m); } catch {} }, live, vecOf: () => decodeVec(live.tags.v).map(x => x / 3), myModes: () => DISC.myModes(me), minor: DISC.isMinor(me), band: live.tags.b, onHit: c => changed('live', 'bdisc', c) });
   const power = async () => { try { const b = await globalThis.navigator?.getBattery?.(), c = globalThis.navigator?.connection; live.setPower(powerLevel({ battery: b?.level ?? 1, charging: !!b?.charging, saveData: !!c?.saveData, metered: c?.type === 'cellular' })); } catch {} };
   power(); const lt = setInterval(() => { if (globalThis.document?.visibilityState === 'hidden') live.setPower('critical'); live.tick(); }, 1000); const lp = setInterval(power, 60e3);
   // direct WebRTC links + calls (friends only; signaling rides E2E mesh envelopes 'rtc', dropped from strangers by the receiver)
@@ -170,9 +190,9 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
     parent: new ParentControls({ store: { read: async () => (await v.read())?.parental || null, write: x => v.use(p => { p.parental = x; }) } }),
     callGate: (c, video) => canCall({ friend: node.friends.has(c), linkUp: !!links.get(c)?.up, blocked: blocks.isBlocked(c), banned: bl.isBanned(c), halted: false, video, parent: DISC.isMinor(me) ? cur?.parent : null }),
     async accept(c) { node.acceptFriend(c); setTimeout(save, 500); changed('accepted', c); },
-    save, ONLINE_MS, e2e, router, roulette, arcade,
+    save, ONLINE_MS, e2e, router, roulette, arcade, shield: rxGate, bdisc: bdw,
     setDiscovery(mode, searching) { const online = globalThis.document?.visibilityState !== 'hidden'; router.active = !!searching && online; // relay duty only while online + searching
-      const m = mode && DISC.canQuery(me, mode) ? mode : null; if (m !== node.discMode || (m && Date.now() - (node.discAt || 0) > 60e3)) { node.discMode = m; node.discAt = Date.now(); if (m) live.setMode(m); if (m) node.send('*', 'disc', DISC.discQuery(me, m)); } },
+      const m = mode && DISC.canQuery(me, mode) ? mode : null; if (m !== node.discMode || (m && Date.now() - (node.discAt || 0) > 60e3)) { node.discMode = m; node.discAt = Date.now(); if (m) live.setMode(m); if (m) bdw?.search(m); } }, // v38: anonymous broadcast discovery (was the legacy ID-carrying 'disc')
     setRetention: (c, o) => node.setRetention(c, o), safetyConversation: c => node.safety.conversation(c),
     link: c => linkFor(c), links, outbox: node.outbox,
     async recent(mode) { if (local) return []; const r = await gfetch('/api/bootstrap?recent=1&code=' + encodeURIComponent(id.code) + (mode ? '&mode=' + mode : '') + (DISC.isMinor(me) ? '' : '&adult=1')).then(x => x.ok ? x.json() : { recent: [] }).catch(() => ({ recent: [] }));
