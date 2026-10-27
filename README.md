@@ -216,7 +216,7 @@ Limits: the per-phone cost of a full list grows with N: about 200 bytes per row,
 ## Legal / safety fixes (2026-10-17, from legal review items 3–6)
 - **18+ age gate** (DOB at first launch, under-18 blocked; only adult flag stored), UK age-assurance placeholder, region-based dating-safety notices for NJ/IL/TX/NY in Discover (placeholder wording, UNVERIFIED).
 - **Voice:** AI disclosure + explicit consent before browser mic or Grok voice; no recording/voiceprints; xAI ZDR noted in `api/_fn/voice-session.js`; typed path always free.
-- **Safety:** Report on profiles and chats → `reports` table; block; safety contact placeholder in Terms/Settings; CSAM/NCMEC escalation in `docs/trust-safety.md`.
+- **Safety:** Report on profiles and chats → `reports` table → moderators' 🛡️ Team review bucket (v39: `mod_queue` Serious abuse / All open / Resolved, DB-enforced moderator access + audit log); block; safety contact placeholder in Terms/Settings; CSAM/NCMEC escalation in `docs/trust-safety.md`.
 - **Religion/orientation:** separate opt-in, hidden by default, on-device only, never in mesh/server/analytics/xAI; warning for criminalizing countries (`CRIMINALIZING_COUNTRIES` config).
 
 ## Build flavors (public vs admin)
