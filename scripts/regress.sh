@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# v41: smoke-refunds (server-side conservative boost refunds: migration static checks, ledger unit with real Ed25519 receipts,
+#      2 real node instances sharing the mesh ledger via a fake PostgREST mesh_refund, fail-closed, live anon refusal;
+#      live DB half = supabase/tests/boost_refunds.sql, rolls back).
 # v40: smoke-globalrl (global API rate limits: migration static checks, 2-3 real node instances sharing one counter via a fake
 #      PostgREST rl_hit, fail-safe fallbacks, live anon refusal; live DB half = supabase/tests/global_rate_limits.sql, rolls back).
 # v39: smoke-reviewq (reports -> team review bucket: migration static checks, SupabaseStore mod RPCs, real-browser review UI;
@@ -13,7 +16,7 @@ set -u; cd "$(dirname "$0")/.."; fail=0; out=${SHOTS:-/workspace/cybermates-shot
 run(){ n=$1; shift; if "$@" > "$out/$n.log" 2>&1; then echo "PASS $n"; else echo "FAIL $n (see $out/$n.log)"; fail=1; fi; }
 run build npm run build:all
 run smoke node --no-warnings scripts/smoke.mjs
-for s in flink shop party arcade analog pick shades itema pmenu sfx arcade-ai match megaship battleship partb calls supaday brawl imports bootfail hostrot hostrot2 hostrot3 ux ui v35 supa-adapter supa-live signin perf glow matchprefs linking-ui rxwire reviewq globalrl; do [ -f scripts/smoke-$s.mjs ] && run smoke-$s node --no-warnings scripts/smoke-$s.mjs; done
+for s in flink shop party arcade analog pick shades itema pmenu sfx arcade-ai match megaship battleship partb calls supaday brawl imports bootfail hostrot hostrot2 hostrot3 ux ui v35 supa-adapter supa-live signin perf glow matchprefs linking-ui rxwire reviewq globalrl refunds; do [ -f scripts/smoke-$s.mjs ] && run smoke-$s node --no-warnings scripts/smoke-$s.mjs; done
 run shots-ack node --no-warnings scripts/shots-ack.mjs                # UX §2/§3 (v32): real 30 s ack timer + countdown at 320-430 px, forced profile, starter characters, rolling photos
 run shots-match node --no-warnings scripts/shots-match.mjs            # UX §5 (v33): per-mode ranges/min %/compare, deal breakers, dating-only fields, Dating-only gender filter, minors, 320-430 px
 run shots-discover node --no-warnings scripts/shots-discover.mjs      # UX §6 (v35): list/swipe, pass refills slot, like, tap loads profile, 320/390/430 px
