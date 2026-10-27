@@ -39,7 +39,25 @@ using `createSupabaseBackend()` instead of the local/mesh adapter.
 Body = nacl box ciphertext sealed to the peer's `profiles.e2e_pubkey` (public half of the device-key vault keys; secret never
 leaves the device). 7-day hold (`expires_at`, hidden by RLS, hourly pg_cron purge). Status sent→delivered→read, recipient-only,
 monotonic. Boosts: `boost_ledger` (grants = service role/purchase webhook); a boosted message costs 1, refunded once if it expires
-unread or the recipient blocks the sender.
+unread, the recipient blocks the sender, or (v41) the recipient deletes their account - decided by `app.boost_refund_decide` (below).
+
+## Conservative boost refunds (v41, migration 20261027000009)
+Boost credits only - no Stripe / real-money calls (money refunds stay manual in the Stripe dashboard).
+* `app.boost_refund_decide(message, cause 'expired'|'blocked'|'recipient_deleted'|'admin', actor, note) -> outcome`, SECURITY DEFINER,
+  `search_path=''`, not client-callable. Order: already refunded -> `duplicate`; no `spend` (-1) row by that sender -> `denied_no_spend`;
+  message row gone -> `denied_not_eligible`; `read` -> `denied_read`; cause not true (not expired / no block / admin outside the service
+  path) -> `denied_not_eligible`; sender already has `app.boost_refund_daily_cap()` (10) refunds in the last 24 h -> `held` (no credit);
+  else +1 `refund` row (unique per message) -> `refunded` (+ un-pin on block). Per-sender advisory lock = same lock as the spend path.
+* Callers: `app.purge_expired()` (hourly pg_cron), `blocks_refund` trigger, new `profile_delete_refunds` BEFORE DELETE on `profiles`
+  (runs before the cascade), legacy `app.refund_boost(uuid)` (wrapper).
+* `app.boost_refund_log`: append-only audit (UPDATE/DELETE raise 42501), private schema, RLS on / no policies / no client grants, no FKs.
+* `public.my_boost_refunds(p_limit)` (authenticated; own rows only via `auth.uid()`), `public.boost_refund_admin(message, note)` and
+  `public.boost_refund_release(log_id, note)` (service role ONLY; note required; spend-bound; bypass the cap; release only `held` rows).
+* Mesh path ledger: `app.mesh_boost_refunds` + `public.mesh_refund(op, msg, from_hash, to_hash, min_age_ms)` (service role ONLY):
+  register (300 / 24 h per sender) / receipt (Ed25519-verified by the API first) / claim (>= 8 s, no receipt, 10 refunds / 24 h per
+  sender, idempotent). Codes arrive HMAC-hashed; rows older than 8 days are dropped by the purge.
+* Live test: `supabase/tests/boost_refunds.sql` (66 checks, rolls back). Advisors: INFO `rls_enabled_no_policy` on the two new app
+  tables (intentional deny-all) and WARN definer-callable on `my_boost_refunds` (intentional: read-only, own rows only).
 
 ## Tests
 * `scripts/smoke-supa-adapter.mjs` (offline) and `scripts/smoke-supa-live.mjs` (live, 73 checks) run in `scripts/regress.sh`.
@@ -48,7 +66,8 @@ unread or the recipient blocks the sender.
 
 ## Needs the project owner (dashboard)
 * Vercel project env (server only, never `VITE_`): `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (+ optional `RL_KEY_SALT`) to switch on the
-  v40 global rate limits (and the server routes that already use them). Not set yet: the API runs per-instance limits only.
+  v40 global rate limits and the v41 shared mesh refund ledger (and the server routes that already use them). Not set yet: the API runs
+  per-instance limits and a per-instance refund ledger only. Optional `REFUND_KEY_SALT` (else `RL_KEY_SALT`) for the refund code hashes.
 * Auth > Sign In / Providers: enable **Anonymous sign-ins** (guest → linked upgrade; also lets the live test self-provision).
 * Auth > URL Configuration: Site URL `https://cybermates-stewart-future-tech.vercel.app`, Redirect URLs add that origin `/**`,
   `http://localhost:5173/**`, and the Capacitor scheme if magic links should open the app.

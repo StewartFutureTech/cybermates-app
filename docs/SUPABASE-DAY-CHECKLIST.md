@@ -36,6 +36,10 @@ and `scripts/smoke-presence.mjs`.
    *Swap:* run the SQL, turn on "private channels only" and per-client limits in Realtime settings.
    *v40:* the server limiter is now GLOBAL when `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are set on Vercel (Supabase RPC
    `public.rl_hit`, migration 20261027000008, applied to dev); without them, or if the DB is slow/down, it falls back to per instance.
+   *v41:* the same env switches `api/refund` to the shared mesh refund ledger (`public.mesh_refund`, migration 20261027000009); if the
+   DB is down a claim answers `unavailable` (no refund). Support (SQL editor, service role): held refunds =
+   `select * from app.boost_refund_log where outcome = 'held' order by created_at;` release one = `select public.boost_refund_release(<id>, 'why');`
+   goodwill refund of one unread boosted message = `select public.boost_refund_admin('<message uuid>', 'why');`. Stripe money refunds: dashboard only.
 4. **Vercel Firewall/WAF: NOTES ONLY (no account changes).** In the dashboard, under Firewall: (a) rate-limit `/api/*` to 60 req/min
    per IP (deny 429); (b) `/api/bootstrap` POST at 10/min per IP; (c) `/api/kill` and `/api/ban` at 10/min per IP; (d) Bot
    Protection / Attack Challenge Mode on standby; (e) block methods other than GET/POST/OPTIONS on `/api/*`. `vercel.json`
