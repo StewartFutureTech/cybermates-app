@@ -34,6 +34,7 @@ Priority: P0 = blocks any real launch, P1 = must fix before public beta, P2 = be
 ## 5. Pending from David
 - [ ] Theme picks: 13 candidates in /workspace/cybermates-themes/list.txt (Midnight Ink, Carbon, Daylight Chrome, Paper Neon, Sunset Grid, Outrun, Arcade, Arctic, Gold Luxe, Toxic Waste, Ocean Deep, Sakura, Amber CRT), preview.png; current app has 11 themes.
 - [ ] Approve "Planned (awaiting approval)" items in README: onion relay rotation, reverse-path failure refunds, full US-only enforcement (VPN detection), broadcast discovery vectors, DoS cheap shield.
+- [x] v38 (2026-10-27) Broadcast discovery and DoS cheap shield wiring: `src/shield.js` RxGate + `src/bdisc.js` BDiscWire wired into the live receive path (`src/app-mesh.js` bus.on); legacy ID-carrying `disc` retired. Test: scripts/smoke-rxwire.mjs (in regress.sh). Not wired: stateless cookie challenge (needs a protocol round trip) and auto-filing flood reports to the server (strikes are logged only).
 
 ## Build queue (after Snake + Tron analog release, 2026-10-21)
 - [ ] All games true 3D only (remove 2D/3D toggle; silent 2D fallback only without WebGL): Snake Battle, Star Fleet, Ultimate TTT, Trivia, Draw & Guess (3D glass easel), etc.
