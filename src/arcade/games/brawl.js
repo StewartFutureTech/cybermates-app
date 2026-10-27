@@ -157,3 +157,6 @@ async function webcryptoKeys(seats) { const C = globalThis.crypto?.subtle; if (!
 async function wcSignVerify(k, body) { const C = crypto.subtle, data = te.encode(hitBody(body)); const sig = new Uint8Array(await C.sign({ name: 'Ed25519' }, k.priv, data));
   if (!(await C.verify({ name: 'Ed25519' }, k.pub, sig, data))) return null; return { ...body, sig: b64(sig) }; }
 export const meta = { id: 'brawl', name: 'Brawl', modes: ['ffa6'], kind: 'realtime', players: SEATS };
+// v42 (networking only): the canonical signed bodies are shared with arcade/brawl-net.js so remote peers can sign/verify
+// inputs + victim hits with native WebCrypto Ed25519 (same bytes as signInput/signHit; no gameplay change).
+export { hitBody, inBody };

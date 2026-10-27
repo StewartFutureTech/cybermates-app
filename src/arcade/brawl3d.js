@@ -42,5 +42,8 @@ export async function brawl3d(canvas, { colors = [] } = {}) {
     const ms = beams(st.beams.length); st.beams.forEach((b, i) => { const m = ms[i], L = Math.hypot(Wd, Hd) * K; m.scale.set(BEAM_W * K * 0.3 * (0.6 + b.t / 20), L, BEAM_W * K * 0.3); const a = Math.atan2(-b.dy, b.dx); m.rotation.set(0, 0, a - Math.PI / 2); m.position.set(X(b.x) + Math.cos(a) * L / 2, Y(b.y) + Math.sin(a) * L / 2, 0.02); m.material.color.copy(fighters[b.own]?.cc || m.material.color); });
     for (const e of st.events) if (e.k === 'hit' || e.k === 'ko') { const v = st.f[e.vic], key = `e:${e.t}:${e.k}:${e.att}:${e.vic}`; if (seen.has(key)) continue; seen.add(key); flash(v.x, v.y, fighters[e.att]?.cc || fighters[e.vic].cc, e.k === 'ko' ? 0.9 : 0.45); shake = Math.max(shake, e.k === 'ko' ? 0.3 : Math.min(0.2, e.dmg / 120)); }
     if (seen.size > 600) seen = new Set([...seen].slice(-200)); }
-  return { set, dispose: S.dispose, shake: () => shake };
+  // v42 (networking only): a player joining/leaving mid-round changes that seat's colour (their theme, de-clashed shade);
+  // same materials, same glass, only the colour values are updated in place.
+  const recolor = (cs = []) => fighters.forEach((F, i) => { if (!cs[i]) return; F.cc.set(cs[i]); F.body.material.color.copy(F.cc); F.body.material.emissive.copy(F.cc); F.ring.material.color.copy(F.cc); F.aura.material.color.copy(F.cc); F.fist.material.color.copy(F.cc); });
+  return { set, dispose: S.dispose, shake: () => shake, recolor };
 }
