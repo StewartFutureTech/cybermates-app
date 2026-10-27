@@ -23,6 +23,18 @@ using `createSupabaseBackend()` instead of the local/mesh adapter.
   conflict of interest (you filed it / you are named) refused. Reporter view unchanged (status only, no note/evidence).
 * Live test: `supabase/tests/report_review_rls.sql` (24 checks in one transaction that always rolls back).
 
+## Global rate limits (v40, migration 20261027000008)
+* `app.rate_limit_buckets(key, window_start, expires_at, count)`: private schema (not exposed by PostgREST), RLS on with no
+  policies, no grants to anon/authenticated. Keys arrive HMAC-SHA256-hashed from the server (`route|ip|<hash>`), never raw IPs/IDs.
+* `public.rl_hit(p_key, p_limit, p_window_secs default 60) -> {allowed, count, limit, reset_ms}`: SECURITY DEFINER, `search_path=''`,
+  fixed window, one `INSERT .. ON CONFLICT DO UPDATE count = count + 1` (concurrent instances serialize on the row lock, no lost
+  increments). EXECUTE for **service_role only** (anon/authenticated get 42501). ~2% of calls run `app.rl_cleanup()` (deletes
+  windows that ended over a minute ago). Core `app.rl_hit_at(..., p_at)` takes an explicit time for tests; not client-callable.
+* Server side: `api/_lib/globalrl.js` + `api/_lib/guard.js` (layer 1 in-memory per instance, layer 2 this RPC). Fail safe: env
+  missing, `CM_GLOBAL_RL=off`, RPC error or >350 ms -> per-instance limiter only, DB skipped for 30 s.
+* Live test: `supabase/tests/global_rate_limits.sql` (26 checks, rolls back). Advisors: one INFO `rls_enabled_no_policy` on
+  `app.rate_limit_buckets` - intentional (deny-all; only the definer RPC touches it).
+
 ## Messages
 Body = nacl box ciphertext sealed to the peer's `profiles.e2e_pubkey` (public half of the device-key vault keys; secret never
 leaves the device). 7-day hold (`expires_at`, hidden by RLS, hourly pg_cron purge). Status sent→delivered→read, recipient-only,
@@ -35,6 +47,8 @@ unread or the recipient blocks the sender.
   Anonymous sign-ins. The test deletes every user it used (`delete_my_account`). Without either it prints SKIP (SUPA_LIVE=1 → fail).
 
 ## Needs the project owner (dashboard)
+* Vercel project env (server only, never `VITE_`): `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (+ optional `RL_KEY_SALT`) to switch on the
+  v40 global rate limits (and the server routes that already use them). Not set yet: the API runs per-instance limits only.
 * Auth > Sign In / Providers: enable **Anonymous sign-ins** (guest → linked upgrade; also lets the live test self-provision).
 * Auth > URL Configuration: Site URL `https://cybermates-stewart-future-tech.vercel.app`, Redirect URLs add that origin `/**`,
   `http://localhost:5173/**`, and the Capacitor scheme if magic links should open the app.
