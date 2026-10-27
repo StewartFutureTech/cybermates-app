@@ -28,7 +28,8 @@ import { Cooldown, Roulette, receiverAccept, isAdult } from './roulette.js';
 import { matchPacket } from './match-v2.js';
 import { LiveNode, powerLevel, decodeVec } from './livemesh.js'; // UX §6-8 living mesh: bucket, soft-tag presence, tentacles, search, tap-to-open // UX §5 compact match packet (visible answers only)
 import { RxGate } from './shield.js'; // v38: DoS cheap shield on the live receive path
-import { BDiscWire } from './bdisc.js'; // v38: broadcast discovery (anonymous soft-tag search) on the live receive path
+import { BDiscWire } from './bdisc.js';
+import { IdBinder, makeClaim, verifyClaim, verifyCert } from './idbind.js'; // v43: ID <-> signing-key binding (proof of work join cost / server certs) // v38: broadcast discovery (anonymous soft-tag search) on the live receive path
 export const PUBLIC_FIELDS = ['name', 'age', 'gender', 'city', 'countryCode', 'bio', 'games', 'lookingFor', 'interests', 'avatarHue', 'thumb', 'test'];
 class BusRendezvous { constructor() { this.known = new Map(); } seen(c) { this.known.set(c, Date.now()); } seeds(shard, ex) { return [...this.known].filter(([c, t]) => c !== ex && Date.now() - t < 10 * 60e3).slice(-3).map(([c]) => c); } register() {} checkIn() {} }
 let cur = null;
@@ -42,6 +43,13 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   const persona = new URLSearchParams(globalThis.location?.search || '').get('as') || null;
   const id = await v.use(async p => { p.meshIds ||= {}; const rec = (p.meshIds[asKey] ||= { keys: newSigningKeys(), friends: {}, blocked: [] }); await migrateIdentity(rec, { persona }); rec.box ||= newBoxKeys(); return { ...rec, ...(p.devLink?.pid ? { code: p.devLink.pid, keys: p.devLink.keys, ownCode: rec.code } : {}) }; }); // v37: a linked device uses the shared profile network ID // box = X25519 keys for per-chat E2E
   const myCodes = [id.code, id.ownCode, id.legacyCode, ...(id.priorIds || [])].filter(Boolean);
+  // v43 ID BINDING (src/idbind.js): prove ONCE per (ID, key) with a bounded proof of work (the web join cost, ~1-2 s on a phone),
+  // cached in the vault. Peers refuse a ping whose ID is bound to another key; the server registry keeps one key per ID.
+  let bindClaim = id.bindClaim?.code === id.code && id.bindClaim?.pub === id.keys.pub && verifyClaim(id.bindClaim, { code: id.code, pub: id.keys.pub }) ? id.bindClaim : null;
+  if (!bindClaim) { onStatus('PROVING ID · ONE-TIME JOIN COST'); const t0 = Date.now(); bindClaim = await makeClaim({ code: id.code, keys: id.keys }); const ms = Date.now() - t0;
+    await v.use(p => { if (p.meshIds?.[asKey]) p.meshIds[asKey].bindClaim = bindClaim; }); (globalThis.__cmBindTiming ||= []).push(ms); }
+  const bindEnv = (typeof import.meta !== 'undefined' && import.meta.env) || {}, bindPub = bindEnv.VITE_ID_BIND_PUBKEY || null;
+  const binder = new IdBinder({ serverPub: bindPub }); binder.trust(id.code, id.keys.pub); for (const [c, f] of Object.entries(id.friends || {})) if (f?.pub) binder.trust(c, f.pub); // friends were pinned before v43
   onStatus('OPENING TRANSPORT'); bus ||= await createBus(); onStatus('TRANSPORT ' + String(bus.kind).toUpperCase());
   const pub = DISC.publishProfile(me, stripSensitive({ ...Object.fromEntries(PUBLIC_FIELDS.map(k => [k, me[k]]).filter(([, x]) => x !== undefined)), mp: matchPacket(me) })); // minors: no dating vectors
   const rv = new BusRendezvous(); let timer = null, verifying = false; const log = [];
@@ -49,10 +57,10 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   const node = new MeshNode({ code: id.code, keys: id.keys, profile: pub, onEvent: changed,
     wallet: { consume: async () => (await db._w().spend(me.id, { boost: true })).ok, refund: () => db._w().refund(me.id, { boost: true }) }, // boosts (paid highlight); starters retired
     net: { send: env => outbound(env) } });
-  node.minor = DISC.isMinor(me); // under 18: no dating requests in or out
+  node.minor = DISC.isMinor(me); node.keyOf = c => binder.pinned(c); // v43: gossiped stubs must use the bound key // under 18: no dating requests in or out
   // E2E layer (src/e2e.js): every envelope signed; directed ones AES-GCM encrypted per chat (X25519). Then relay rotation
   // (src/relay.js): 2-3 onion hops when enough eligible relays, else direct over the current transport.
-  const e2e = new E2E({ code: id.code, keys: id.keys, box: id.box }), attested = new Set(), localT = !String(bus.kind).startsWith('supabase');
+  const e2e = new E2E({ code: id.code, keys: id.keys, box: id.box, binder, bindProof: bindClaim }), attested = new Set(), localT = !String(bus.kind).startsWith('supabase');
   let myAtt = false;
   // Boost refunds verified server-side (api/_fn/refund.js): register on send, recipient posts its signed receipt, sender claims
   // only after the timeout. Local dev bus: the node refunds locally (wallet) because there is no server.
@@ -81,7 +89,8 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   for (const { id: c } of blocks.list()) node.blocked.add(c);
   const member = new Member({ code: id.code, profile: pub, now: () => Date.now(), net: { deliver: (from, to, m) => { const s = JSON.stringify(m); if (s.length > 1024) pack(m).then(z => bus.post({ k: 'mem', to, z })).catch(() => {}); else bus.post({ k: 'mem', to, m }); } } }); // big slices/batches gzip-compressed
   const fwd = new Set(), bl = new BanList(), kicked = new Map(); await bl.load(v);
-  member.banlist = bl; member.onBanList = () => { bl.save(v).catch(() => {}); changed('ban list', bl.hash()); };
+  member.banlist = bl; member.keyOf = c => binder.pinned(c); // v43: membership rows must use the bound key
+  member.onBanList = () => { bl.save(v).catch(() => {}); changed('ban list', bl.hash()); };
   const kick = c => { const e = bl.entry(c); if (!e || Date.now() - (kicked.get(c) || 0) < 60e3) return; kicked.set(c, Date.now()); node.presence.delete(c); node.live.delete(c); node.cache.delete(c); bus.post({ k: 'ctl', msg: e, src: 'ban-list' }); changed('refused banned', c); };
   member.onBan = kick;
   // v38 CHEAP SHIELD on the live receive path (src/shield.js RxGate): relevance filter -> shape/size cap -> per-sender /
@@ -120,6 +129,7 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   // LIVING MESH (src/livemesh.js) rides E2E 'lm' envelopes (receiver-gated in LiveNode: band, block, ban, signature, rate).
   const live = new LiveNode({ code: id.code, keys: id.keys, profile: pub, full: pub, send: (to, m) => node.send(to, 'lm', m), isBanned: c => bl.isBanned(c), isBlocked: c => blocks.isBlocked(c) || node.blocked.has(c),
     isOnline: c => c === id.code || node.isOnline(c), rendezvous: () => [...node.presence.keys()].filter(c => c !== id.code && node.isOnline(c)).sort(() => Math.random() - .5).slice(0, 4), onEvent: (...e) => changed('live', ...e) });
+  live.keyOf = c => binder.pinned(c); // v43: living-mesh adverts must use the bound key
   node.on_lm = (from, b) => live.receive(from, b); liveRef = live;
   bdw = new BDiscWire({ post: m => { try { bus.post(m); } catch {} }, live, vecOf: () => decodeVec(live.tags.v).map(x => x / 3), myModes: () => DISC.myModes(me), minor: DISC.isMinor(me), band: live.tags.b, onHit: c => changed('live', 'bdisc', c) });
   const power = async () => { try { const b = await globalThis.navigator?.getBattery?.(), c = globalThis.navigator?.connection; live.setPower(powerLevel({ battery: b?.level ?? 1, charging: !!b?.charging, saveData: !!c?.saveData, metered: c?.type === 'cellular' })); } catch {} };
@@ -156,14 +166,16 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   // jump-start, no owner/master phone, no seed list, no phone snapshots. Server unreachable => no new entry.
   // The list is kept in memory only (member.active); it is never written to disk. Local dev bus: no server (dev only).
   const local = !bus.kind.startsWith('supabase'), plan = startPlan({ lastOk: lastServerOk(), local });  changed('check-in', plan.why);
-  if (!local && plan.pull) { onStatus('ENTERING VIA SERVER'); const att = await requestAttestation(id.code).catch(() => ({ provider: 'none' })); const br = await gfetch('/api/bootstrap?code=' + encodeURIComponent(id.code) + (me.mode ? '&mode=' + encodeURIComponent(me.mode) : '') + (id.legacyCode ? '&legacy=' + encodeURIComponent(id.legacyCode) : ''), { headers: { 'x-cm-attest': btoa(JSON.stringify(att)) } }).catch(() => null); if (br?.status === 451) { const j = await br.json().catch(() => ({})); onStatus('US ONLY · NOT AVAILABLE HERE'); onNotice({ geo: true, notice: j.notice }); throw Object.assign(new Error('us-only'), { geo: true }); } if (!br || (!br.ok && ![403, 451, 503].includes(br.status))) { onStatus('SERVER UNREACHABLE · NO NEW ENTRY'); bus.close?.(); throw Object.assign(new Error('server-unreachable'), { offline: true }); }
+  if (!local && plan.pull) { onStatus('ENTERING VIA SERVER'); const att = await requestAttestation(id.code, { pub: id.keys.pub }).catch(() => ({ provider: 'none' })); const br = await gfetch('/api/bootstrap?code=' + encodeURIComponent(id.code) + (me.mode ? '&mode=' + encodeURIComponent(me.mode) : '') + (id.legacyCode ? '&legacy=' + encodeURIComponent(id.legacyCode) : ''), { headers: { 'x-cm-attest': btoa(JSON.stringify(att)) } }).catch(() => null); if (br?.status === 451) { const j = await br.json().catch(() => ({})); onStatus('US ONLY · NOT AVAILABLE HERE'); onNotice({ geo: true, notice: j.notice }); throw Object.assign(new Error('us-only'), { geo: true }); } if (!br || (!br.ok && ![403, 451, 503].includes(br.status))) { onStatus('SERVER UNREACHABLE · NO NEW ENTRY'); bus.close?.(); throw Object.assign(new Error('server-unreachable'), { offline: true }); }
   if (br?.ok) { recordServerOk(); br.clone?.().json?.().then(j => j?.geoWarning && onNotice({ warning: j.geoWarning, geo: true })).catch(() => {}); } if (br && (br.status === 403 || br.status === 503)) { const j = await br.json().catch(() => ({})), blk = { banned: br.status === 403 && !j.suspended, suspended: !!j.suspended, until: j.until, level: j.level, killed: br.status === 503, reason: j.reason }; if (br.status === 403) await applyServerBan({ vault: v, reason: blk.reason || (blk.suspended ? 'suspended' : 'banned'), until: blk.suspended ? blk.until : null, wipePeers }).catch(() => {}); bus.close?.(); onNotice(blk); throw Object.assign(new Error(blk.banned ? 'banned' : 'killed'), { blocked: blk }); } try { const r = await br.json(); if (Array.isArray(r.bans)) await member.mergeBans(r.bans.map(decodeEntry)); myAtt = !!r.attested; if (r.warning) onNotice({ warning: r.warning, level: r.level }); if (r.flags?.includes('unattested')) changed('bootstrap: ID unattested', att.provider); if (Array.isArray(r.list)) changed('server list', member.warmStart(r.list), 'rows (in memory only)'); } catch {}
     presence('login'); }
   onStatus('JOINING GOSSIP MESH'); await member.join(rv); node.ping(); onStatus('MESH JOINED · ' + member.active.size + ' NODES');
   const myModes = () => DISC.myModes ? DISC.myModes(me) : (me.lookingFor || []);
-  function presence(op) { if (local) return; const body = JSON.stringify({ op, code: id.code, legacy: id.legacyCode || undefined, row: member.row(member.shards[0], 'alive'), modes: myModes(), adult: !DISC.isMinor(me), card: { name: me.name, thumb: pub?.thumb || '', interests: (me.games || me.interests || []).slice(0, 6) } });
+  function presence(op) { if (local) return; const body = JSON.stringify({ op, code: id.code, legacy: id.legacyCode || undefined, row: member.row(member.shards[0], 'alive'), bind: op === 'login' || op === 'heartbeat' ? bindClaim : undefined, modes: myModes(), adult: !DISC.isMinor(me), card: { name: me.name, thumb: pub?.thumb || '', interests: (me.games || me.interests || []).slice(0, 6) } });
     if (op === 'logoff' && globalThis.navigator?.sendBeacon) { try { navigator.sendBeacon('/api/bootstrap', new Blob([body], { type: 'application/json' })); return; } catch {} }
-    gfetch('/api/bootstrap', { method: 'POST', headers: { 'content-type': 'application/json' }, body }).then(async r => { if (r.status === 403 || r.status === 503 || r.status === 451) { const j = await r.json().catch(() => ({})); if (r.status === 403) applyServerBan({ vault: v, mesh: cur, wipePeers, onNotice, reason: j.reason, until: j.suspended ? j.until : null }); else onNotice(r.status === 451 ? { geo: true, notice: j.notice } : { killed: true, reason: j.reason }); } }).catch(() => {}); }
+    gfetch('/api/bootstrap', { method: 'POST', headers: { 'content-type': 'application/json' }, body }).then(async r => { if (r.status === 403 || r.status === 503 || r.status === 451) { const j = await r.json().catch(() => ({})); if (r.status === 403) applyServerBan({ vault: v, mesh: cur, wipePeers, onNotice, reason: j.reason, until: j.suspended ? j.until : null }); else onNotice(r.status === 451 ? { geo: true, notice: j.notice } : { killed: true, reason: j.reason }); }
+      else if (r.status === 409) { const j = await r.json().catch(() => ({})); changed('bootstrap: refused', j.error || 'id-bound'); onNotice({ warning: j.error === 'key-bound' ? 'This app key is already linked to another ID.' : 'This ID is linked to another install. If you reinstalled the app, it frees up after ' + (j.idleRebindDays ?? 14) + ' days without use.', idBound: true }); try { node.bye(); member.leave(); } catch {} }
+      else if (r.ok) { const j = await r.json().catch(() => ({})); if (j?.cert && verifyCert(j.cert, bindPub, { code: id.code, pub: id.keys.pub })) e2e.bindProof = j.cert; } }).catch(() => {}); } // server cert (when configured) replaces the claim in pings
   let lastBeat = Date.now();
   const sweep = () => { const r = sweepStale({ member, node, isBanned: c => bl.isBanned(c), cooldowns: [rlCooldown] }); { const n = node.safety.sweep(); if (n) node.safety.persist().catch(() => {}); } node.expirePending().then(n => n && changed('pending expired (7 days)', n)).catch(() => {}); for (const c of node.presence.keys()) cap.touch(c); for (const c of cap.trim()) { node.presence.delete(c); node.cache.delete(c); } if (r.peers || r.queued || r.gossip || r.friendReqs || r.banned) changed('24h sweep', r.peers, 'stale peers,', r.banned || 0, 'banned,', r.queued, 'queued msgs,', r.gossip, 'gossip items dropped'); return r; };
   sweep(); // on startup (after warm start), then every 10 min — local only, no network
@@ -190,7 +202,7 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
     parent: new ParentControls({ store: { read: async () => (await v.read())?.parental || null, write: x => v.use(p => { p.parental = x; }) } }),
     callGate: (c, video) => canCall({ friend: node.friends.has(c), linkUp: !!links.get(c)?.up, blocked: blocks.isBlocked(c), banned: bl.isBanned(c), halted: false, video, parent: DISC.isMinor(me) ? cur?.parent : null }),
     async accept(c) { node.acceptFriend(c); setTimeout(save, 500); changed('accepted', c); },
-    save, ONLINE_MS, e2e, router, roulette, arcade, shield: rxGate, bdisc: bdw,
+    save, ONLINE_MS, e2e, binder, bindClaim, router, roulette, arcade, shield: rxGate, bdisc: bdw,
     setDiscovery(mode, searching) { const online = globalThis.document?.visibilityState !== 'hidden'; router.active = !!searching && online; // relay duty only while online + searching
       const m = mode && DISC.canQuery(me, mode) ? mode : null; if (m !== node.discMode || (m && Date.now() - (node.discAt || 0) > 60e3)) { node.discMode = m; node.discAt = Date.now(); if (m) live.setMode(m); if (m) bdw?.search(m); } }, // v38: anonymous broadcast discovery (was the legacy ID-carrying 'disc')
     setRetention: (c, o) => node.setRetention(c, o), safetyConversation: c => node.safety.conversation(c),
