@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# v46: smoke-rtgate (Realtime join gate + per-user limits: migration static checks, JS<->SQL PoW vectors, MeshGate vs a DB-rule
+#      fake, SupabaseBus fail-closed join/back-off/renew, live anon refusals; live DB half = supabase/tests/realtime_gate.sql, rolls
+#      back) + e2e-rtgate (LIVE Realtime: anon private 'mesh'/'control' join refused; signed-in admit/join/suspend/limit part needs
+#      SUPA_TEST_USERS, else SKIP).
 # v45: smoke-csam (CSAM reporting duty + evidence preservation: migration static checks, evidence.js collect/seal/parts/SHA-256/
 #      upload/pending queue against a DB-rule fake store, adapter RPCs; live DB half = supabase/tests/csam_evidence.sql, rolls back)
 #      + e2e-csam (2 real tabs: real report flow seals B's message + image, normal report unchanged, vault pending survives reload,
@@ -30,7 +34,7 @@ set -u; cd "$(dirname "$0")/.."; fail=0; out=${SHOTS:-/workspace/cybermates-shot
 run(){ n=$1; shift; if "$@" > "$out/$n.log" 2>&1; then echo "PASS $n"; else echo "FAIL $n (see $out/$n.log)"; fail=1; fi; }
 run build npm run build:all
 run smoke node --no-warnings scripts/smoke.mjs
-for s in flink shop party arcade analog pick shades itema pmenu sfx arcade-ai match megaship battleship partb calls supaday brawl imports bootfail hostrot hostrot2 hostrot3 ux ui v35 supa-adapter supa-live signin perf glow matchprefs linking-ui rxwire reviewq globalrl refunds brawlnet idbind proxvoice csam; do [ -f scripts/smoke-$s.mjs ] && run smoke-$s node --no-warnings scripts/smoke-$s.mjs; done
+for s in flink shop party arcade analog pick shades itema pmenu sfx arcade-ai match megaship battleship partb calls supaday brawl imports bootfail hostrot hostrot2 hostrot3 ux ui v35 supa-adapter supa-live signin perf glow matchprefs linking-ui rxwire reviewq globalrl refunds brawlnet idbind proxvoice csam rtgate; do [ -f scripts/smoke-$s.mjs ] && run smoke-$s node --no-warnings scripts/smoke-$s.mjs; done
 run shots-ack node --no-warnings scripts/shots-ack.mjs                # UX §2/§3 (v32): real 30 s ack timer + countdown at 320-430 px, forced profile, starter characters, rolling photos
 run shots-match node --no-warnings scripts/shots-match.mjs            # UX §5 (v33): per-mode ranges/min %/compare, deal breakers, dating-only fields, Dating-only gender filter, minors, 320-430 px
 run shots-discover node --no-warnings scripts/shots-discover.mjs      # UX §6 (v35): list/swipe, pass refills slot, like, tap loads profile, 320/390/430 px
@@ -43,5 +47,6 @@ run e2e-brawlnet node scripts/e2e-brawlnet.mjs                          # v42 ne
 run e2e-idbind node scripts/e2e-idbind.mjs                              # v43 ID binding, 3 real tabs + forged pings
 run e2e-proxvoice node scripts/e2e-proxvoice.mjs                        # v44 proximity voice transport, 3 real tabs + fake mic
 run e2e-csam node scripts/e2e-csam.mjs                                  # v45 CSAM evidence preservation, 2 real tabs + moderator panel
+run e2e-rtgate node scripts/e2e-rtgate.mjs                              # v46 Realtime join gate, LIVE Realtime (anon refused; signed-in part needs SUPA_TEST_USERS)
 [ -x "${JAVA_HOME:-/home/box/jdk17}/bin/java" ] && run android bash scripts/android-check.sh
 [ $fail = 0 ] && echo "REGRESSION: ALL PASS" || echo "REGRESSION: FAILURES"; exit $fail
