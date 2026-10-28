@@ -10,7 +10,9 @@
 import { kv, useSupabaseBackend, supabaseBackend, asUuid } from './kv-store.js';
 const links = () => kv('id-links', { max: 50 });
 let be = null, pending = null;
-async function backend() { if (be) return be; const { createSupabaseBackend } = await import('./backend/supabase-backend.js'); return (be = await createSupabaseBackend()); }
+async function backend() { if (be) return be; const { createSupabaseBackend } = await import('./backend/supabase-backend.js');
+  let sealer = null; try { const { getVault } = await import('./settings-ui.js'); sealer = await (await import('./supa-device.js')).deviceSealer(await getVault()); } catch {} // v48: FS + every device
+  return (be = await createSupabaseBackend({ sealer })); }
 export const signedIn = () => !!supabaseBackend();
 export async function linkedUid(code) { return code ? (await links().get(code))?.uid || null : null; }
 // mesh code -> Supabase uid for report targets: already a uuid, a local link, or the server lookup (signed in only).
@@ -41,6 +43,7 @@ export async function activate(b, { localMinor = null, codes = [], birthdate = n
   if (!prof) { try { await b.store.upsertProfile({}); } catch {} } // profile row keyed by the Supabase user id
   for (const code of codes.filter(Boolean)) { await links().put({ id: code, uid, at: Date.now() });
     try { await b.client.from('mesh_links').upsert({ code, user_id: uid }, { onConflict: 'code', ignoreDuplicates: true }); } catch {} }
+  if (b.store?.fs) { try { await b.store.publishDevice(); } catch {} } // v48: this device's signed prekey bundle (public keys only)
   await flushReports(b);
   return { ok: true, uid, band };
 }
@@ -50,7 +53,7 @@ export async function verifyCode(code, opts = {}, email = pending) { const b = a
 export async function restore(opts = {}) { try { const b = await backend(); if (!(await b.auth.session())) return { ok: false, reason: 'no-session' }; return await activate(b, opts); } catch (e) { return { ok: false, reason: 'offline', error: e.message }; } }
 // second step for a new account when the device had no birth date in memory
 export async function finishAge(birthdate, opts = {}) { const b = await backend(); return activate(b, { ...opts, birthdate }); }
-export async function signOut() { const b = supabaseBackend(); useSupabaseBackend(null); try { await b?.auth.signOut(); } catch {} return { ok: true }; }
+export async function signOut() { const b = supabaseBackend(); useSupabaseBackend(null); if (b?.store?.fs) { try { await b.store.removeDevice(); } catch {} } try { await b?.auth.signOut(); } catch {} return { ok: true }; } // v48: a signed-out device stops receiving
 // reports queued while signed out (compliance.submitReport) are sent now, with the reported code resolved to a uid.
 async function flushReports(b) { const K = 'cybermates:pending-reports', ls = globalThis.localStorage; if (!ls) return 0;
   let q = []; try { q = JSON.parse(ls.getItem(K) || '[]'); } catch {} const left = []; let sent = 0;
