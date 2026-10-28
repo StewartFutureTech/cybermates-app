@@ -34,6 +34,12 @@ and `scripts/smoke-presence.mjs`.
    `realtime.messages` is in `schema.sql`: only broadcast on `mesh` (read/write) and `control` (read). Every `api/` route
    is wrapped by `api/_lib/guard.js` (per-IP + per-ID limits, body cap, optional geo/halt).
    *Swap:* run the SQL, turn on "private channels only" and per-client limits in Realtime settings.
+   *v46:* the `mesh`/`control` policies moved to migration 20261027000013 (+14): only `authenticated` users with a fresh
+   ADMISSION (`public.mesh_admit`, proof of work in SQL; or `public.mesh_admit_service` from the server after attestation), an
+   age-checked profile and no suspension may join/send `mesh`; `control` is read-only. Anon is refused (verified live). Per-user
+   limits in `app.mesh_gate_config` (6 attempts/h, 24/day, 12 h lifetime, cost b16 x k6, attested b12 x k2, `enabled` switch):
+   `update app.mesh_gate_config set admit_per_hour = 10 where id;`. Suspend one user: `select public.mesh_suspend_service('<uuid>', 60, 'why');`
+   (moderators: `mod_mesh_suspend` / `mod_mesh_lift`). Mesh-only users then need a session WITH an age check (sign-in card).
    *v40:* the server limiter is now GLOBAL when `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are set on Vercel (Supabase RPC
    `public.rl_hit`, migration 20261027000008, applied to dev); without them, or if the DB is slow/down, it falls back to per instance.
    *v41:* the same env switches `api/refund` to the shared mesh refund ledger (`public.mesh_refund`, migration 20261027000009); if the

@@ -57,3 +57,5 @@ Explicit consent + AI disclosure before any mic use; audio transcribed then disc
 - New IDs pay a one-time proof of work (the web join cost), which slows mass creation of throwaway IDs for ban evasion or floods. It doesn't stop it; real attestation (Play Integrity / App Attest) is the stronger fix and is still a hook.
 - Reinstall on the same phone (same ID, new key): the old binding frees up after 14 days of silence, and the new install pays a heavier proof of work. Support can also rotate a binding if the user still has the old key. David decides the idle window.
 
+## Mesh suspensions (v46)
+- Moderators can cut one user off the shared Realtime mesh: `mod_mesh_suspend(user, minutes, reason)` (reviewer up to 7 days, lead up to 30, never themselves, reason required) and `mod_mesh_lift(user)`. The user's admission is removed at once, so Realtime refuses their next join and their next token refresh. The server has `mesh_suspend_service` (service role). Attempts and suspensions are logged in `app.mesh_admit_log` (no IPs, kept 7 days). This is a network lever, separate from bans (`api/_fn/ban.js`) and report actions.
