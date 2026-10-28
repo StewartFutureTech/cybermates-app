@@ -3,8 +3,9 @@
 // Transport-agnostic: `net.send(envelope)` floods to peers (Supabase broadcast / WebRTC data channels); call node.receive(env) on arrival.
 import nacl from 'tweetnacl';
 import { b64, unb64, rand } from './vault.js';
+import { effective, visibleMs, WHILE_MS, DEFAULT as RET_DEFAULT } from './retention.js';
 export const STARTER_MAX = 500, CACHE_MAX = 50, ONLINE_MS = 5 * 60e3, DROP_MS = 2 * 864e5, ACK_TIMEOUT_MS = 8000;
-export const PLAN_TTL_MS = 48 * 3600e3, THUMB_MAX = 4096;
+export const PLAN_TTL_MS = WHILE_MS, THUMB_MAX = 4096; // v51: plans follow 'while' retention window (~30d), not 48h
 export const OFFLINE_MSG = 'Offline, try later', BLOCKED_MSG = "You've been blocked", LOGGED_OFF_MSG = 'They logged off to mesh'; // UX §9: failed delivery notice
 const stable = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a < b ? -1 : 1)) : x);
 const msgBytes = o => new TextEncoder().encode(stable(o));
@@ -108,15 +109,33 @@ export class MeshNode {
   sentCopy(to, m, id) { if (!id || !m || typeof m !== 'object' || !this.friends.has(to) || this.blocked.has(to)) return false; const ch = this.chat(to); if (ch.msgs.some(x => x.id === id)) return false;
     const local = { from: this.code, text: typeof m.text === 'string' ? m.text : '', attachment: m.attachment, at: Number.isFinite(m.at) ? m.at : this.now(), burn: m.burn || 0, id, state: 'sent', copy: true }; ch.msgs.push(local); this.keep(to, local); this.onEvent('chat-copy', to); return true; }
   // 7-day safety copy (kept inside the encrypted vault, wiped by the sweep) so 'Hide instantly' chats can still be reported
-  keep(peer, m) { Promise.resolve(this.safety?.add(peer, { from: m.from, text: m.text, at: m.at || this.now() })).catch(() => {}); }
+  keep(peer, m) { return Promise.resolve(this.safety?.add(peer, { from: m.from, text: m.text, at: m.at || this.now() })).then(() => this.onPersist?.()).catch(() => {}); }
   // retention choice: each side says what it wants; effective() applies only when both agree (minors: always kept)
   setRetention(peer, opt) { if (!this.friends.has(peer)) return false; this.chat(peer).ret = { ...(this.chat(peer).ret || {}), mine: opt }; this.send(peer, 'ret', { opt }); return true; }
-  on_ret(from, b) { if (!this.friends.has(from) || !['forever', 'while', 'instant'].includes(b?.opt)) return; this.chat(from).ret = { ...(this.chat(from).ret || {}), theirs: b.opt }; this.onEvent('ret', from); }
+  on_ret(from, b) { if (!this.friends.has(from) || !['forever', 'while', 'instant'].includes(b?.opt)) return; this.chat(from).ret = { ...(this.chat(from).ret || {}), theirs: b.opt }; this.sweep(); this.onPersist?.(); this.onEvent('ret', from); }
   proposeBurn(peer, ttlMs = 60e3) { this.chat(peer).burn.mine = ttlMs; this.send(peer, 'burn', { ttlMs }); }
   on_burn(from, b) { this.chat(from).burn.theirs = b.ttlMs; this.onEvent('burn-proposed', from, b.ttlMs); }
   stopBurn(peer) { this.chat(peer).burn.mine = 0; this.send(peer, 'burn', { ttlMs: 0 }); }
   markRead(peer) { const c = this.chat(peer); for (const m of c.msgs) if (m.burn && !m.readAt) m.readAt = this.now(); this.sweep(); }
-  sweep() { const n = this.now(); for (const c of this.chats.values()) c.msgs = c.msgs.filter(m => !m.burn || !(m.readAt || m.from === this.code) || n - (m.readAt || m.at) < m.burn); }
+  // Burn + retention visibility. SafetyCopies (7d) are separate and kept for ALL three options.
+  sweep() { const n = this.now();
+    for (const c of this.chats.values()) {
+      c.msgs = c.msgs.filter(m => !m.burn || !(m.readAt || m.from === this.code) || n - (m.readAt || m.at) < m.burn);
+      const opt = effective({ mine: c.ret?.mine, theirs: c.ret?.theirs, minor: this.minor });
+      const vis = visibleMs(opt);
+      if (vis === Infinity) continue;
+      if (vis <= 0) { c.msgs = []; continue; } // instant hide: UI empty; encrypted safety copy still held
+      c.msgs = c.msgs.filter(m => n - (m.at || 0) < vis);
+    } }
+  // Vault snapshot of visible chats (instant → empty msgs; forever/while keep per visibleMs). Always pair with safety persist.
+  persistChats() { const out = {};
+    for (const [peer, c] of this.chats) {
+      const opt = effective({ mine: c.ret?.mine, theirs: c.ret?.theirs, minor: this.minor });
+      const vis = visibleMs(opt); const n = this.now();
+      const msgs = vis === Infinity ? [...c.msgs] : vis <= 0 ? [] : c.msgs.filter(m => n - (m.at || 0) < vis);
+      out[peer] = { ret: c.ret || {}, msgs: msgs.map(({ from, text, at, id, state, burn, attachment, rid }) => ({ from, text, at, id, state, burn, attachment, rid })) };
+    } return out; }
+  loadChats(data = {}) { for (const [peer, d] of Object.entries(data || {})) { const c = this.chat(peer); if (d.ret) c.ret = { ...d.ret }; if (Array.isArray(d.msgs)) c.msgs = d.msgs.slice(); } this.sweep(); }
   // ---- 6. friends (mutual) + signed profile sync ----
   // Free connection request. boost:true spends 1 boost (highlight). The boost is refunded when NO signed delivery receipt
   // from the recipient arrives within RCPT_TIMEOUT_MS (refund verified server-side & idempotent per message id: api/_fn/refund.js).

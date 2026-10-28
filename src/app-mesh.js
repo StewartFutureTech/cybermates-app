@@ -136,6 +136,10 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   { const { SafetyCopies } = await import('./retention.js'); const saved = (await v.read().catch(() => ({})))?.meshIds?.[asKey]?.safety || [];
     node.safety = new SafetyCopies({ seal: async x => x, open: async x => x, store: new Map(saved) }); const add0 = node.safety.add.bind(node.safety);
     node.safety.persist = () => v.use(p => { if (p.meshIds?.[asKey]) p.meshIds[asKey].safety = [...node.safety.store]; }); node.safety.add = async (...a) => { await add0(...a); await node.safety.persist(); }; }
+  { const savedChats = (await v.read().catch(() => ({})))?.meshIds?.[asKey]?.chats || {};
+    try { node.loadChats(savedChats); } catch {} // v51: restore retention-scoped visible history
+    const persistChatsSoon = () => v.use(p => { if (p.meshIds?.[asKey]) p.meshIds[asKey].chats = node.persistChats(); }).catch(() => {});
+    node.persistChatsSoon = persistChatsSoon; node.onPersist = persistChatsSoon; }
   // v45: sealed-evidence queue for child-safety reports lives in the same encrypted vault (NOT swept with the 7-day safety copy)
   { const evLoad = async () => (await v.read().catch(() => ({})))?.meshIds?.[asKey]?.evidencePending || [], refs = l => l.map(x => x.ref).join();
     // write, then read back (vault use() is read-modify-write; a concurrent save elsewhere could drop this change)
@@ -179,7 +183,7 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   const killLinks = reason => { for (const L of links.values()) try { L.kill(reason); } catch {} links.clear(); };
   // v49 LINKED-DEVICE SYNC (src/devsync.js): friends (union) + block/unblock (last writer wins) go to my own sibling devices only.
   const blockLog = id.blockLog && typeof id.blockLog === 'object' ? { ...id.blockLog } : {}; let syncT = null; const devSync = { sent: 0, got: 0, applied: 0 };
-  const save = () => v.use(p => { const x = p.meshIds[asKey]; x.friends = node.persistable().friends; x.blocked = [...node.blocked]; x.blockLog = { ...blockLog }; }).then(r => { syncSoon(); return r; });
+  const save = () => v.use(p => { const x = p.meshIds[asKey]; x.friends = node.persistable().friends; x.blocked = [...node.blocked]; x.blockLog = { ...blockLog }; x.chats = node.persistChats(); }).then(r => { syncSoon(); return r; });
   syncSoon = () => { if (!e2e.siblings().length) return; clearTimeout(syncT); syncT = setTimeout(() => { if (!cur || !e2e.siblings().length) return; devSync.sent++; node.send(id.code, 'dsync', buildSync({ friends: node.friends, blockLog })); }, 600); };
   function onCopy(o) {
     if (o.type === 'dsync' && o.to === id.code) { devSync.got++; const r = mergeSync(o.body, { friends: node.friends, blockLog, isBanned: c => bl.isBanned(c), isBlocked: c => blocks.isBlocked(c) || node.blocked.has(c), pinned: c => binder.pinned(c) });
@@ -205,7 +209,7 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
       else if (r.status === 409) { const j = await r.json().catch(() => ({})); changed('bootstrap: refused', j.error || 'id-bound'); onNotice({ warning: j.error === 'key-bound' ? 'This app key is already linked to another ID.' : 'This ID is linked to another install. If you reinstalled the app, it frees up after ' + (j.idleRebindDays ?? 14) + ' days without use.', idBound: true }); try { node.bye(); member.leave(); } catch {} }
       else if (r.ok) { const j = await r.json().catch(() => ({})); if (j?.cert && verifyCert(j.cert, bindPub, { code: id.code, pub: id.keys.pub })) e2e.bindProof = j.cert; } }).catch(() => {}); } // server cert (when configured) replaces the claim in pings
   let lastBeat = Date.now();
-  const sweep = () => { const r = sweepStale({ member, node, isBanned: c => bl.isBanned(c), cooldowns: [rlCooldown] }); { const n = node.safety.sweep(); if (n) node.safety.persist().catch(() => {}); } node.expirePending().then(n => n && changed('pending expired (7 days)', n)).catch(() => {}); for (const c of node.presence.keys()) cap.touch(c); for (const c of cap.trim()) { node.presence.delete(c); node.cache.delete(c); } if (r.peers || r.queued || r.gossip || r.friendReqs || r.banned) changed('24h sweep', r.peers, 'stale peers,', r.banned || 0, 'banned,', r.queued, 'queued msgs,', r.gossip, 'gossip items dropped'); return r; };
+  const sweep = () => { const r = sweepStale({ member, node, isBanned: c => bl.isBanned(c), cooldowns: [rlCooldown] }); node.sweep(); { const n = node.safety.sweep(); if (n) node.safety.persist().catch(() => {}); } node.persistChatsSoon?.(); node.expirePending().then(n => n && changed('pending expired (7 days)', n)).catch(() => {}); for (const c of node.presence.keys()) cap.touch(c); for (const c of cap.trim()) { node.presence.delete(c); node.cache.delete(c); } if (r.peers || r.queued || r.gossip || r.friendReqs || r.banned) changed('24h sweep', r.peers, 'stale peers,', r.banned || 0, 'banned,', r.queued, 'queued msgs,', r.gossip, 'gossip items dropped'); return r; };
   sweep(); // on startup (after warm start), then every 10 min — local only, no network
   let lastSweep = Date.now(), lastCheckTry = 0;
   const hb = setInterval(() => { node.ping(); node.prune(); member.tick(); changed(); if (Date.now() - lastSweep > 10 * 60e3) { lastSweep = Date.now(); sweep(); } if (Date.now() - lastBeat > 60e3) { lastBeat = Date.now(); presence('heartbeat'); }
@@ -238,7 +242,7 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
     // v51 soft→hard Discover candidates: full profiles that cleared soft (both mins) AND local hard check
     hardReady: () => [...(live.fullCache || [])].map(([c, e]) => ({ code: c, ...e })),
     floodFlush: () => sh.flood?.flush?.(), floodStats: () => sh.flood?.stats,
-    setRetention: (c, o) => node.setRetention(c, o), safetyConversation: c => node.safety.conversation(c),
+    setRetention: (c, o) => { const ok = node.setRetention(c, o); node.sweep(); node.persistChatsSoon?.(); return ok; }, safetyConversation: c => node.safety.conversation(c),
     link: c => linkFor(c), links, outbox: node.outbox,
     async recent(mode) { if (local) return []; const r = await gfetch('/api/bootstrap?recent=1&code=' + encodeURIComponent(id.code) + (mode ? '&mode=' + mode : '') + (DISC.isMinor(me) ? '' : '&adult=1')).then(x => x.ok ? x.json() : { recent: [] }).catch(() => ({ recent: [] }));
       const list = blocks.filter((r.recent || []).map(e => e.code)); const ok = new Set(list); const out = (r.recent || []).filter(e => ok.has(e.code) && !bl.isBanned(e.code) && e.code !== id.code); for (const e of out) node.recent.add(e.code); return out; },
