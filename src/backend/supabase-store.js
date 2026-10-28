@@ -3,12 +3,14 @@
 // ADAPTER_METHODS so features can swap backends. All authorization is server-side (RLS); this file never decides access.
 import { unwrap } from './supabase-client.js';
 import { MAX_PHOTOS } from './supabase-config.js';
+import { isV2, MAX_DEVICES } from './supabase-e2e.js';
 export const ADAPTER_METHODS = [
   'getCurrentUserId', 'getProfile', 'upsertProfile', 'listProfiles', 'submitAgeCheck', 'setMood', 'acknowledge',
   'listInterests', 'setInterests', 'listFavoriteGames', 'setFavoriteGames', 'getMatchPrefs', 'setMatchPrefs', 'findMatches',
   'listPhotos', 'uploadPhoto', 'deletePhoto', 'photoUrl',
   'sendFriendRequest', 'respondFriendRequest', 'listFriendRequests', 'listFriends', 'unfriend',
   'getOrCreateConversation', 'listConversations', 'listMessages', 'sendMessage', 'markDelivered', 'markRead', 'boostBalance',
+  'publishDevice', 'listDevices', 'removeDevice', 'openRow',
   'report', 'escalateReport', 'listMyReports', 'amModerator', 'modQueue', 'modClaim', 'modResolve', 'modActions',
   'evidencePubkey', 'evidenceBegin', 'evidencePut', 'modEvidenceList', 'modEvidenceGet', 'modEvidenceServerCopies', 'modPreserve', 'modCybertipPacket', 'modCybertipRecorded', 'block', 'unblock', 'listBlocks', 'mute', 'unmute',
   'listLfg', 'postLfg', 'deleteLfg', 'listEvents', 'createEvent', 'joinEvent', 'leaveEvent',
@@ -18,8 +20,10 @@ const PROFILE_COLS = 'id,handle,display_name,bio,age_band,mood,mood_at,e2e_pubke
 const toMsg = m => ({ id: m.id, conversationId: m.conversation_id, from: m.sender_id, to: m.recipient_id, body: m.body, nonce: m.nonce, boosted: m.boosted, status: m.status, read: m.status === 'read', at: Date.parse(m.created_at), expiresAt: Date.parse(m.expires_at) });
 
 export class SupabaseStore {
-  // sealer: optional boxSealer() from supabase-e2e.js; when present, text is sealed to the peer's e2e_pubkey.
-  constructor(client, { sealer = null } = {}) { this.c = client; this.sealer = sealer; this.kind = 'supabase'; }
+  // sealer: optional boxSealer() (v1 static, sealed to the peer's e2e_pubkey) or fsSealer() (v48 forward secrecy + every device,
+  // see supabase-e2e.js). requireFs: never fall back to v1 for a recipient without a device bundle (reason 'no-peer-device').
+  constructor(client, { sealer = null, requireFs = false, deviceTtlMs = 30e3 } = {}) { this.c = client; this.sealer = sealer; this.kind = 'supabase'; this.requireFs = requireFs; this.deviceTtlMs = deviceTtlMs; this._dev = new Map(); this._pubSpk = null; }
+  get fs() { return this.sealer?.kind === 'fs'; }
   from(t) { return this.c.from(t); }
   async uid() { const { data } = await this.c.auth.getSession(); const id = data?.session?.user?.id; if (!id) throw new Error('not signed in'); return id; }
   async getCurrentUserId() { try { return await this.uid(); } catch { return null; } }
@@ -70,16 +74,38 @@ export class SupabaseStore {
     return Promise.all(unwrap(await q).map(m => this._open(toMsg(m))));
   }
   async _peerKey(id) { return (await this.getProfile(id))?.e2e_pubkey; }
-  async _open(m) { if (!this.sealer || !m.nonce) return { ...m, text: m.body }; const me = await this.uid(); try { return { ...m, text: this.sealer.open(await this._peerKey(m.from === me ? m.to : m.from), m.body, m.nonce) }; } catch { return { ...m, text: null, undecryptable: true }; } }
+  // ---- v48 device bundles (public.e2e_devices; migration 20261028000015). Rows are verified by the sealer (signature + pin). ----
+  async publishDevice() { if (!this.fs) return null; const me = await this.uid(), row = this.sealer.bundle(me);
+    const upd = unwrap(await this.from('e2e_devices').update({ spk_id: row.spk_id, spk: row.spk, spk_sig: row.spk_sig }).eq('user_id', me).eq('device_id', row.device_id).select('device_id'));
+    if (!upd?.length) unwrap(await this.from('e2e_devices').insert({ user_id: me, ...row }));
+    if (this._pubSpk == null) { try { unwrap(await this.from('profiles').update({ e2e_pubkey: row.ik }).eq('id', me).select('id')); } catch {} } // v1 compat: legacy peers seal to the active device
+    this._pubSpk = row.spk_id; this._dev.delete(me); return row; }
+  async _ensureDevice() { if (this.fs && this._pubSpk !== this.sealer.currentPrekeyId()) await this.publishDevice(); }
+  async listDevices(uid, { fresh = false } = {}) { uid ||= await this.uid(); const hit = this._dev.get(uid);
+    if (!fresh && hit && Date.now() - hit.at < this.deviceTtlMs) return hit.rows;
+    const raw = unwrap(await this.from('e2e_devices').select('device_id,ik,sk_pub,spk_id,spk,spk_sig,updated_at').eq('user_id', uid).order('updated_at', { ascending: false }).limit(MAX_DEVICES)) || [];
+    const rows = this.sealer?.verifyDevice ? raw.filter(r => this.sealer.verifyDevice(uid, r)) : raw; this._dev.set(uid, { at: Date.now(), rows }); return rows; }
+  async removeDevice(deviceId = this.sealer?.deviceId) { const me = await this.uid(); unwrap(await this.from('e2e_devices').delete().eq('user_id', me).eq('device_id', deviceId)); this._dev.delete(me); if (deviceId === this.sealer?.deviceId) this._pubSpk = null; return true; }
+  async _senderDevice(uid, dev) { let d = (await this.listDevices(uid)).find(r => r.device_id === dev); if (!d) d = (await this.listDevices(uid, { fresh: true })).find(r => r.device_id === dev); return d || null; }
+  async _open(m) { if (!this.sealer || !m.nonce) return { ...m, text: m.body }; const me = await this.uid();
+    try { if (isV2(m.body)) { if (!this.fs) throw new Error('v2 needs fsSealer'); const h = this.sealer.header(m.body);
+        return { ...m, text: this.sealer.open2({ conv: m.conversationId, from: m.from, to: m.to, me, body: m.body, nonce: m.nonce, senderDev: h && await this._senderDevice(m.from, h.sd) }), fs: true }; }
+      return { ...m, text: this.sealer.open(await this._peerKey(m.from === me ? m.to : m.from), m.body, m.nonce), fs: false }; }
+    catch (e) { return { ...m, text: null, undecryptable: true, why: e?.code || 'E2E' }; } }
+  // a raw messages row (e.g. from SupabaseRealtime.subscribeMessages) -> opened message
+  openRow(row) { return this._open(toMsg(row)); }
   // LocalAdapter-compatible: sendMessage(from, to, text, {boost}) -> {ok, msg} | {ok:false, reason}
   async sendMessage(from, to, text, { boost = false } = {}) {
     try {
       const me = await this.uid(); if (from && from !== me) return { ok: false, reason: 'not-you' };
       const conv = await this.getOrCreateConversation(to);
-      let body = text, nonce = null;
-      if (this.sealer) { const pk = await this._peerKey(to); if (!pk) return { ok: false, reason: 'no-peer-key' }; ({ body, nonce } = this.sealer.seal(pk, text)); }
+      let body = text, nonce = null, fs = false;
+      if (this.fs) { await this._ensureDevice(); const toDevs = await this.listDevices(to, { fresh: true });
+        if (toDevs.length) { ({ body, nonce } = this.sealer.seal2({ conv: conv.id, from: me, to, toDevs, myDevs: await this.listDevices(me), text })); fs = true; }
+        else if (this.requireFs) return { ok: false, reason: 'no-peer-device' }; }
+      if (this.sealer && !fs) { const pk = await this._peerKey(to); if (!pk) return { ok: false, reason: 'no-peer-key' }; ({ body, nonce } = this.sealer.seal(pk, text)); } // v1: legacy peer
       const row = unwrap(await this.from('messages').insert({ conversation_id: conv.id, sender_id: me, body, nonce, boosted: boost }).select().single());
-      return { ok: true, msg: { ...toMsg(row), text } };
+      return { ok: true, msg: { ...toMsg(row), text, fs } };
     } catch (e) { return { ok: false, reason: /boost/.test(e.message) ? 'no-boosts' : (e.code === '42501' ? 'forbidden' : 'error'), error: e.message }; }
   }
   async _status(ids, status) { if (!ids.length) return []; return unwrap(await this.from('messages').update({ status }).in('id', ids).select('id,status')); }
