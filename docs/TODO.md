@@ -160,6 +160,9 @@ Priority: P0 = blocks any real launch, P1 = must fix before public beta, P2 = be
 - [x] game-audio.js: per-game watchers + pitch profiles (match games diff state; mass games use World events; Brawl events/fx)
 - [x] Mute, gate (no audio on DOB/terms) and tap-to-resume rules respected; tests smoke-sfx + shots-d
 
+## cm-v50 (2026-10-28)
+- [x] Mass Arena Snake + Light cycles: omit on-screen ◀▲▼▶ `.arc-pad` for analog games (`GAMES[g].analog`); keep drag/hold + ←/→. Draw & Guess / match pads unchanged. sw cache cm-v50.
+
 ## cm-v32 (2026-10-21, built, not deployed)
 - [x] UX §2 acknowledgement: Accept needs scroll-to-end AND minimum timer (sized to read-aloud length, clamped 20-30 s; full terms = 30 s) AND the tick box; visible countdown ring + 3-step checklist + "Accept (Ns)" label; Read to me stays at the very top; reduced motion = static ring; re-accept on every app version (ACCEPT_ID = terms@build; sw cache cm-v32).
 - [x] UX §2.5 forced profile: onboarding "Start matching" is blocked until missingProfile() is empty (jumps to the first missing step with a notice); existing incomplete profiles stay locked to Profile.
@@ -178,7 +181,8 @@ Priority: P0 = blocks any real launch, P1 = must fix before public beta, P2 = be
 - [x] Minors: legacy evaluate no longer drops every under-18 user (minors' Discover was empty) - minors match minors only, never adults, never Dating; minor ranges capped at 17; no Dating toggle/fields; no Roulette tab.
 - [x] Profile form novalidate: out-of-range ages are clamped on save instead of a silent browser block.
 - [x] sw cache cm-v33. Tests: new scripts/smoke-matchprefs.mjs (46 checks), new scripts/shots-match.mjs (43 checks, 320/360/390/430 px + minor) in regress; screenshots /workspace/cybermates-shots/v33-match/.
-- [ ] Open: mesh search (livemesh.search) is not yet called with the per-mode min % from the UI; gender in soft tags is one letter (Trans man/Trans woman collide) - fine for now, revisit with the mesh server.
+- [x] cm-v51: livemesh soft→hard Discover — soft tags carry `n` mins; softClearsBoth → pget/pfull → local hardScore before Discover (`setDiscovery` passes `min: minFor(me,m)`; `hardReady` merges fullCache). Defaults dating 50 / friends 40 / gaming 40. Remaining: gender in soft tags is one letter (Trans man/Trans woman collide) — fine for now.
+- [x] cm-v51: mass-arena PresenceSync reply-to-join + silence prune; Matchmaker BOT_START 15s + Join invite 20s; Bingo mid-round waiting queue; CookieGate + FloodReporter PROTO=1 (client). Preview only.
 
 ## cm-v34 (2026-10-22)
 - [x] Hidden / blank / "don't answer" field vs the viewer's deal breaker: compounding x0.75 per field (80 -> 60 -> 45), replaces flat 35%; score never reaches 0. Tests in smoke-matchprefs.

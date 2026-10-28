@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# v51: smoke-v51 (PresenceSync reply-to-join + silence prune; Matchmaker BOT_START/INVITE; soft→hard mins + softClearsBoth;
+#      CookieGate/FloodReporter PROTO=1). Soft→hard Discover wired in livemesh/app-mesh/main. Preview only.
 # v49: smoke-mdmesh (multi-device delivery on the MESH path for v37-linked devices: per-ID device sets + sibling devices, v3
 #      envelopes with a per-device wrapped content key (forward secret), sent copies, one-device types, single-device wire
 #      unchanged, compat against a FROZEN v48 client both ways, devsync friends/block LWW, mesh sentCopy, wiring) + e2e-mdmesh
@@ -45,7 +47,7 @@ set -u; cd "$(dirname "$0")/.."; fail=0; out=${SHOTS:-/workspace/cybermates-shot
 run(){ n=$1; shift; if "$@" > "$out/$n.log" 2>&1; then echo "PASS $n"; else echo "FAIL $n (see $out/$n.log)"; fail=1; fi; }
 run build npm run build:all
 run smoke node --no-warnings scripts/smoke.mjs
-for s in flink shop party arcade analog pick shades itema pmenu sfx arcade-ai match megaship battleship partb calls supaday brawl imports bootfail hostrot hostrot2 hostrot3 ux ui v35 supa-adapter supa-live signin perf glow matchprefs linking-ui rxwire reviewq globalrl refunds brawlnet idbind proxvoice csam rtgate e2efs supafs mdmesh; do [ -f scripts/smoke-$s.mjs ] && run smoke-$s node --no-warnings scripts/smoke-$s.mjs; done
+for s in flink shop party arcade analog pick shades itema pmenu sfx arcade-ai match megaship battleship partb calls supaday brawl imports bootfail hostrot hostrot2 hostrot3 ux ui v35 supa-adapter supa-live signin perf glow matchprefs linking-ui rxwire reviewq globalrl refunds brawlnet idbind proxvoice csam rtgate e2efs supafs mdmesh v51; do [ -f scripts/smoke-$s.mjs ] && run smoke-$s node --no-warnings scripts/smoke-$s.mjs; done
 run shots-ack node --no-warnings scripts/shots-ack.mjs                # UX §2/§3 (v32): real 30 s ack timer + countdown at 320-430 px, forced profile, starter characters, rolling photos
 run shots-match node --no-warnings scripts/shots-match.mjs            # UX §5 (v33): per-mode ranges/min %/compare, deal breakers, dating-only fields, Dating-only gender filter, minors, 320-430 px
 run shots-discover node --no-warnings scripts/shots-discover.mjs      # UX §6 (v35): list/swipe, pass refills slot, like, tap loads profile, 320/390/430 px
