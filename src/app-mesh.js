@@ -25,9 +25,10 @@ import { ParentControls } from './parental.js';
 import { getMood, setMood as setMoodMem, clearMood } from './mood.js';
 import { ConnCap } from './conncap.js';
 import { Cooldown, Roulette, receiverAccept, isAdult } from './roulette.js';
-import { matchPacket } from './match-v2.js';
+import { matchPacket, minFor } from './match-v2.js';
 import { LiveNode, powerLevel, decodeVec } from './livemesh.js'; // UX §6-8 living mesh: bucket, soft-tag presence, tentacles, search, tap-to-open // UX §5 compact match packet (visible answers only)
-import { RxGate } from './shield.js'; // v38: DoS cheap shield on the live receive path
+import { RxGate } from './shield.js'; // v38: DoS cheap shield on the live receive path (v51: CookieGate via makeShield)
+import { makeShield, PROTO as MESH_PROTO } from './shield-wire.js';
 import { BDiscWire } from './bdisc.js';
 import { buildSync, mergeSync } from './devsync.js'; // v49: friends + block decisions synced to my own linked devices (dsync)
 import { IdBinder, makeClaim, verifyClaim, verifyCert } from './idbind.js'; // v43: ID <-> signing-key binding (proof of work join cost / server certs) // v38: broadcast discovery (anonymous soft-tag search) on the live receive path
@@ -106,7 +107,8 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   // game / stranger / anonymous budgets, all BEFORE unpack, signature verify (e2e.open) or decrypt. Packets for other
   // phones on the shared channel are ignored first, so they never count against anyone.
   let liveRef = null, bdw = null;
-  const rxGate = new RxGate({ isKnown: c => c === id.code || node.friends.has(c) || e2e.peers.has(c) || node.presence.has(c) || !!liveRef?.bucket.has(c), onStrike: s => changed('shield: flood dropped from', s.code, '(' + s.count + ')') });
+  const sh = makeShield({ code: id.code, bus, changed, isKnown: c => c === id.code || node.friends.has(c) || e2e.peers.has(c) || node.presence.has(c) || !!liveRef?.bucket.has(c) });
+  const rxGate = sh.gate, floodRep = sh.flood;
   const rxMeta = m => { if (!m || typeof m !== 'object') return { sender: null };
     if (m.k === 'mesh') { const e = m.env; if (!e) return null; if (e.from === id.code) return (e.to === '*' ? e.type === 'ping' : Array.isArray(e.md)) ? { sender: id.code } : null; if (e.to !== id.code && e.to !== '*') return null; /* v49: my linked devices' pings + v3 copies pass above */ return { sender: e.from, game: e.to === '*' && e.type === 'arc' }; }
     if (m.k === 'mem') return m.to === id.code ? { sender: null } : null;
@@ -115,7 +117,7 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
     if (m.k === 'bdisc-ans') return bdw?.pending.has(m.id) ? { sender: null } : null; // not my query: dropped for free
     return { sender: null }; };
   bus.on(msg => {
-    if (!msg) return; { const meta = rxMeta(msg); if (!meta || !rxGate.admit(msg, meta).ok) return; }
+    if (!msg) return; if (rxGate.wire?.beforeAdmit?.(msg) === 'handled') return; { const meta = rxMeta(msg); if (!meta || !rxGate.admit(msg, meta).ok) return; }
     if (msg.k === 'bdisc') { if (msg.q) bdw?.onQuery(msg.q); return; } // anonymous query: maybe a sealed soft-tag answer (staggered)
     if (msg.k === 'bdisc-ans') { if (bdw?.onAnswer(msg)) changed('bdisc hit'); return; } // only the searcher can open it
     if (msg.k === 'ctl' && msg.msg?.nonce) { if (fwd.has(msg.msg.nonce)) return; fwd.add(msg.msg.nonce); // signed kill/ban/clear gossip: verify, forward once if the signature is valid, then apply
@@ -123,7 +125,7 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
       verifySig(msg.msg).then(okSig => { if (okSig) try { bus.post(msg); } catch {} return Promise.all(myCodes.map(c => applyControl(msg.msg, { code: c, vault: v, mesh: cur, onNotice, source: msg.src === 'ban-list' ? 'record' : 'broadcast' }))).then(rs => rs.find(r => r.applied) || rs[0]); }).then(r => changed('control', msg.msg.type, msg.msg.scope, r.applied || r.reason)).catch(() => {}); return; }
     if (msg.k === 'hello' && !blocks.allowInbound(msg)) return; // user-blocked IDs: presence ignored; their chat envelopes reach node.receive, which drops them and tells the sender they're blocked (+ refund)
     if (msg.code && bl.isBanned(msg.code)) return kick(msg.code); if (msg.env?.from && bl.isBanned(msg.env.from)) return kick(msg.env.from); // banned: refuse, don't relay, send signed kill
-    if (msg.k === 'hello') { rv.seen(msg.code); if (msg.code !== id.code && !msg.ack) bus.post({ k: 'hello', code: id.code, ack: true }); return; }
+    if (msg.k === 'hello') { sh.onHello(msg, rv); return; } // v51: CookieGate accept + pv/ck on ack
     if (msg.k === 'mem' && msg.to === id.code) { if (msg.z) { unpack(msg.z).then(m => { member.receive(m); changed('membership', m.t); }).catch(() => {}); return; } member.receive(msg.m); return changed('membership', msg.m.t); }
     if (msg.k === 'onion') { const r = router.onPacket(msg); if (r?.undeliverable != null) { node.on_undeliv(null, { ref: r.undeliverable }); return changed('returned undeliverable', r.undeliverable); } if (r) setTimeout(() => { try { bus.post(r.pkt); } catch {} }, r.delay); return; } // relay hop (only while online + searching)
     if (msg.k === 'mesh' && msg.env.from === id.code) { inbound(msg.env); return; } // v49: sibling device (rxMeta let only pings / v3 through)
@@ -187,7 +189,7 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
         for (const [c, pub] of r.addFriends) { if (!binder.pinned(c)) binder.trust(c, pub); node.friends.set(c, { pub, stub: null }); node.pendingIn.delete(c); node.pendingOut.delete(c); node.boosted?.delete(c); }
         devSync.applied++; await save(); changed('linked device sync', r.addFriends.length, 'friends,', r.block.length + r.unblock.length, 'block changes'); })().catch(() => {}); return; }
     if (o.type === 'chat' && o.to !== id.code) { if (node.sentCopy(o.to, o.body, o.id)) changed('sent copy', o.to); } }
-  onStatus('BROADCASTING HELLO'); bus.post({ k: 'hello', code: id.code }); await new Promise(r => setTimeout(r, 300));
+  onStatus('BROADCASTING HELLO'); bus.post(sh.helloOut()); await new Promise(r => setTimeout(r, 300));
   // SINGLE ENTRY (api/_fn/bootstrap.js): the server super list is the ONLY way in. Halt / ban / US-only gate there. No cached-list
   // jump-start, no owner/master phone, no seed list, no phone snapshots. Server unreachable => no new entry.
   // The list is kept in memory only (member.active); it is never written to disk. Local dev bus: no server (dev only).
@@ -231,7 +233,11 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
     async accept(c) { node.acceptFriend(c); setTimeout(save, 500); changed('accepted', c); },
     save, syncDevices: () => syncSoon(), ONLINE_MS, e2e, binder, bindClaim, router, roulette, arcade, shield: rxGate, bdisc: bdw,
     setDiscovery(mode, searching) { const online = globalThis.document?.visibilityState !== 'hidden'; router.active = !!searching && online; // relay duty only while online + searching
-      const m = mode && DISC.canQuery(me, mode) ? mode : null; if (m !== node.discMode || (m && Date.now() - (node.discAt || 0) > 60e3)) { node.discMode = m; node.discAt = Date.now(); if (m) live.setMode(m); if (m) bdw?.search(m); } }, // v38: anonymous broadcast discovery (was the legacy ID-carrying 'disc')
+      const m = mode && DISC.canQuery(me, mode) ? mode : null; if (m !== node.discMode || (m && Date.now() - (node.discAt || 0) > 60e3)) { node.discMode = m; node.discAt = Date.now(); if (m) live.setMode(m); if (m) { bdw?.search(m); // v38 anonymous soft-tag query
+        live.search({ mode: m, min: minFor(me, m) }, hit => changed('live', 'search', hit?.code)); } } }, // v51: soft search uses profile/DEFAULT_MIN (never 0 by default)
+    // v51 soft→hard Discover candidates: full profiles that cleared soft (both mins) AND local hard check
+    hardReady: () => [...(live.fullCache || [])].map(([c, e]) => ({ code: c, ...e })),
+    floodFlush: () => sh.flood?.flush?.(), floodStats: () => sh.flood?.stats,
     setRetention: (c, o) => node.setRetention(c, o), safetyConversation: c => node.safety.conversation(c),
     link: c => linkFor(c), links, outbox: node.outbox,
     async recent(mode) { if (local) return []; const r = await gfetch('/api/bootstrap?recent=1&code=' + encodeURIComponent(id.code) + (mode ? '&mode=' + mode : '') + (DISC.isMinor(me) ? '' : '&adult=1')).then(x => x.ok ? x.json() : { recent: [] }).catch(() => ({ recent: [] }));

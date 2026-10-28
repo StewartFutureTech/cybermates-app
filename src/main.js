@@ -1,20 +1,24 @@
 import { logoHTML, markSVG } from './logo.js';
+import './game-noselect.js'; // cm-v35: no long-press select/callout inside games
 import { navIcon } from './nav-icons.js';
 import * as C0 from './compliance.js';
 import { checkDevice, setSimulateEmulator, isSimulatingEmulator } from './device-gate.js';
 import './style.css';
+import './neon.css'; // neon grid v2 (glass, theme-colored edges, animated grid; reduced-motion aware)
 import { demoLastSeen, makeThumb } from './thumb.js';
 const withThumb = async p => { try { p.thumb = p.photos?.[0] ? await makeThumb(p.photos[0]) : ''; } catch { p.thumb = ''; } return p; }; // stub thumb for presence
 import { recency } from './mesh.js';
 import * as D from './data.js';
 import { db, DAILY_STARTERS, dailyLimit } from './store.js';
-import { findMatches, evaluate, prefFor, KM_PER_MI } from './match.js';
+import { evaluate, prefFor, KM_PER_MI } from './match.js';
 import { visibleAccounts, isMutual, linkFor, inviteUrl, HOW_TO, cardText, copy } from './handoff.js';
 import { p2pPanel, bootP2P } from './p2p-ui.js';
 import { startMesh, mesh } from './app-mesh.js';
 import * as DISC from './discovery.js';
 import * as MU from './mesh-ui.js';
 import * as IU from './inbox-ui.js';
+import * as FLUI from './friend-link-ui.js';
+import * as SHOP from './shop-ui.js';
 import { jackIn } from './loader.js';
 import { killState, blockedReason, noticeBanner } from './ban.js';
 import { helpView } from './help.js';
@@ -23,6 +27,13 @@ import { arcadeView, stopArcade } from './arcade-ui.js';
 import { rouletteView } from './roulette-ui.js';
 import { visibleFor as rouletteVisible } from './roulette.js';
 import * as T from './theme.js';
+import * as FS from './fullscreen.js';
+import * as UX from './ux-ui.js';
+import * as PH from './photos.js';
+import * as MV from './match-v2.js';
+import * as DV from './discover-view.js';
+import { profileComplete, missingProfile, ensureDeviceKey } from './login-seq.js';
+if (typeof document !== 'undefined' && document.body) FS.install(); else if (typeof document !== 'undefined') addEventListener('DOMContentLoaded', () => FS.install());
 T.applyLook(); T.initTypingGlow(); import('./fx-pointer.js').then(F => F.initPointerFx()); import('./sfx.js').then(S => S.initAudioUnlock()); import('./lasers.js').then(L => L.initLasers());
 // Dev/testing: ?as=<seedId> makes THIS TAB act as that demo user (not persisted), so several tabs can be different people.
 // ADMIN is a build-time constant (VITE_ADMIN=1 via `npm run build:admin`); public builds tree-shake every ADMIN branch.
@@ -30,12 +41,13 @@ const ADMIN = import.meta.env.VITE_ADMIN === '1';
 const AS = ADMIN ? new URLSearchParams(location.search).get('as') : null;
 if (ADMIN) globalThis.__cmDev = { db }; // admin/dev builds only: scripts/sim-users.mjs uses it to create TEST· bot profiles
 if (ADMIN && AS) { db.getCurrentUserId = async () => AS; db.setCurrentUserId = async () => {}; }
-const meshRefresh = () => { const a = document.activeElement; if (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.value) return; if (['discover', 'inbox', 'profile', 'dev'].includes(st.tab)) render(); };
+const meshRefresh = () => { if (document.querySelector('.dv-loading, .dv-profile')) return; /* tap-to-open profile is showing: don't wipe it */ const a = document.activeElement; if (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.value) return; if (['discover', 'inbox', 'profile', 'dev'].includes(st.tab)) render(); };
 import { speak, listen, canListen, canSpeak, parseList, parseOne, parseNumber, parseHandles, crossPick } from './voice.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const st = { tab: 'discover', mode: 'friends', chatWith: null, step: 0, draft: null, me: null };
+import('./player-menu.js').then(PM => PM.install({ mesh, getMe: () => st.me, report: (m, c) => MU.reportFlow(m, c) }));
 
 // ---------- field definitions (used by voice onboarding AND manual editor) ----------
 const dating = p => (p.lookingFor || []).includes('dating');
@@ -45,7 +57,7 @@ const POP = { games: ['Fortnite', 'Call of Duty', 'Minecraft', 'Valorant', 'Leag
 // Scripted onboarding flow. core = asked during setup; the rest is offered as "add more" from the review screen.
 const F = [
   { k: 'name', label: 'Display name', type: 'text', core: 1, ask: "Hey! I'm your Cybermates guide. What name should people see?", ph: 'e.g. Nova' },
-  { k: 'age', label: 'Age', type: 'number', core: 1, ask: 'How old are you? Cybermates is 18 plus.' },
+  { k: 'age', label: 'Age', type: 'number', core: 1, ask: 'How old are you? Under 18s get a safe minor mode without dating.' },
   { k: 'lookingFor', label: 'What are you here for?', type: 'list', o: D.MODES, labels: D.MODE_LABEL, core: 1, ask: 'What are you here for? Friends, gaming, dating — pick as many as you like.' },
   { k: 'gender', label: 'Gender', type: 'one', o: D.GENDERS, core: 1, ask: 'What is your gender?' },
   { k: 'seekingGenders', label: 'Interested in dating', type: 'list', o: D.GENDERS, core: 1, when: dating, ask: 'Who are you interested in dating?' },
@@ -76,7 +88,7 @@ const F = [
 const LISTS = F.filter(f => f.type === 'list');
 
 const get = (p, k) => k.startsWith('answers.') ? p.answers?.[k.slice(8)] : k === 'ageRange' ? [p.ageMin, p.ageMax] : k === 'loc' ? p : p[k];
-const set = (p, k, v) => { if (k === 'ageRange') { [p.ageMin, p.ageMax] = v; } else if (k === 'loc') Object.assign(p, v); else if (k.startsWith('answers.')) { p.answers = p.answers || {}; p.answers[k.slice(8)] = v; } else p[k] = v; };
+const set = (p, k, v) => { if (k === 'ageRange') { [p.ageMin, p.ageMax] = v; p.ageRanges = { ...(p.ageRanges || {}), dating: MV.clampRange(p, v) }; } else if (k === 'loc') Object.assign(p, v); else if (k.startsWith('answers.')) { p.answers = p.answers || {}; p.answers[k.slice(8)] = v; } else p[k] = v; };
 
 function fieldHTML(f, v) {
   const id = 'f_' + f.k.replace('.', '_');
@@ -97,8 +109,9 @@ function fieldHTML(f, v) {
   if (f.type === 'location') return `<div id="${id}"><button type="button" class="primary wide" data-gps>📍 Use my location</button><p class="muted small center">or type it</p>
     <input data-l="city" placeholder="City" value="${esc(v?.city)}"><input data-l="region" placeholder="State / region" value="${esc(v?.region)}"><input data-l="countryCode" placeholder="Country code (US, GB, JP…)" maxlength="2" value="${esc(v?.countryCode)}"></div>`;
   if (f.type === 'photos') { const ph = v || [];
-    return `<div id="${id}"><div class="photos">${ph.map((u, i) => `<div class="ph"><img src="${u}" alt=""><button type="button" data-del="${i}">✕</button></div>`).join('')}${ph.length < 3 ? '<label class="ph add">＋<input type="file" accept="image/*" hidden></label>' : ''}</div>
-      <p class="muted small">No photo? No problem — you'll get a colorful initials avatar. Who sees photos: <select data-photoreveal><option value="match" ${(st.draft || st.me)?.photoReveal !== 'public' ? 'selected' : ''}>🤝 Only after a match</option><option value="public" ${(st.draft || st.me)?.photoReveal === 'public' ? 'selected' : ''}>🌐 Everyone</option></select></p></div>`; }
+    return `<div id="${id}"><div class="photos">${ph.map((u, i) => `<div class="ph"><img src="${u}" alt=""><button type="button" data-del="${i}">✕</button></div>`).join('')}<label class="ph add">＋<input type="file" accept="image/*" hidden></label></div>
+      <p class="muted small" data-rolling hidden></p>${UX.presetsHTML((st.draft || st.me)?.avatarPreset)}
+      <p class="muted small">No photo? Pick a starter character above, or you'll get a colorful initials avatar. Who sees photos: <select data-photoreveal><option value="match" ${(st.draft || st.me)?.photoReveal !== 'public' ? 'selected' : ''}>🤝 Only after a match</option><option value="public" ${(st.draft || st.me)?.photoReveal === 'public' ? 'selected' : ''}>🌐 Everyone</option></select></p></div>`; }
   if (f.type === 'question') {
     const a = v || { answer: '', accept: [], importance: 10 };
     return `<div id="${id}" class="qbox"><label>My answer<select data-r="answer"><option value=""></option>${f.q.options.map((o, i) => `<option value="${i}" ${a.answer === i ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></label>
@@ -145,7 +158,7 @@ function geocodeLocal(p) {
 // Photo if allowed (self / public / after mutual match), else a friendly initials avatar.
 const initials = n => esc(String(n || '?').replace(/\(TEST\)/, '').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase());
 const avatar = (p, size = 48, { self = false, mutual = false } = {}) => {
-  const photo = p?.photos?.[0] && (self || mutual || p.photoReveal === 'public') ? p.photos[0] : null;
+  const photo = (p?.photos?.[0] && (self || mutual || p.photoReveal === 'public') ? p.photos[0] : null) || (p?.avatarPreset && PH.PRESETS.some(x => x.id === p.avatarPreset) ? PH.presetURL(p.avatarPreset) : null); // starter character = generic, always shown
   const h = p?.avatarHue ?? 200;
   return `<div class="av" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.38)}px;background:${photo ? `center/cover url(${photo})` : `linear-gradient(135deg,hsl(${h} 85% 60%),hsl(${(h + 60) % 360} 80% 45%))`}">${photo ? '' : initials(p?.name)}</div>`;
 };
@@ -154,16 +167,18 @@ const verified = p => p?.verified ? '<span class="vbadge" title="Verified (previ
 async function render() {
   st.me = await db.getProfile(await db.getCurrentUserId());
   if (!st.me) { st.tab = 'onboard'; }
+  else if (!profileComplete(st.me) && !['profile', 'onboard', 'help'].includes(st.tab)) st.tab = 'profile'; // UX §2.5: forced profile setup until complete
   if (st.tab !== 'discover') mesh()?.setDiscovery?.(null, false); // not searching: no relay duty, no discovery queries
   const app = $('#app');
   const unread = st.me ? (await db.listMessages(st.me.id)).filter(m => m.to === st.me.id && !m.read).length : 0;
-  app.innerHTML = `<header><b class="logo">${logoHTML()}<small>social mesh</small></b>${T.headerToggles()}${IU.parentButton(st.me)}<span class="who">${st.me ? avatar(st.me, 30, { self: true }) : ''}</span></header>
+  app.innerHTML = `<header><b class="logo">${logoHTML()}<small>social mesh</small></b>${T.headerToggles()}${IU.parentButton(st.me)}<span class="who">${st.me ? IU.headerMood() + avatar(st.me, 30, { self: true }) : ''}</span></header>
   <main id="view"></main>
-  <nav>${[['discover', '🔥', 'Discover'], ['inbox', '💬', 'Inbox' + (unread ? ` (${unread})` : '')], ['arcade', '🕹', 'Arcade'], ...(st.me && rouletteVisible(st.me) ? [['roulette', '🎲', 'Connect']] : []), ['profile', '👤', 'Profile'], ['shop', '💎', 'Shop'], ['help', '🤖', 'Help'], ...(ADMIN ? [['dev', '🛠', 'Dev']] : [])].map(([t, i, l]) => `<button data-tab="${t}" class="${st.tab === t ? 'on' : ''}">${navIcon(t, st.tab === t)}${l}</button>`).join('')}</nav>`;
+  <nav>${[['discover', '🔥', 'Discover'], ['inbox', '💬', 'Inbox' + (unread ? ` (${unread})` : '')], ['arcade', '🕹', 'Arcade'], ['friends', '👥', 'Friends'], ...(st.me && rouletteVisible(st.me) ? [['roulette', '🎲', 'Connect']] : []), ['profile', '👤', 'Profile'], ['shop', '💎', 'Shop'], ['help', '🤖', 'Help'], ...(ADMIN ? [['dev', '🛠', 'Dev']] : [])].map(([t, i, l]) => `<button data-tab="${t}" class="${st.tab === t ? 'on' : ''}">${navIcon(t, st.tab === t)}${l}</button>`).join('')}</nav>`;
+  if (st.me && !['onboard', 'arcade'].includes(st.tab)) SHOP.mountBanner(app, st.me).catch(() => {}); else SHOP.unmountBanner(); // bottom house-ad slot (hidden after Remove ads)
   T.wireHeader(app); app.querySelector('#parentbtn')?.addEventListener('click', () => IU.openParent());
   app.querySelectorAll('nav button').forEach(b => b.onclick = () => { st.tab = b.dataset.tab; st.chatWith = null; st.meshChat = null; render(); });
-  const v = $('#view'); if (st.tab !== 'arcade') stopArcade(); if (st.tab === 'roulette' && !rouletteVisible(st.me)) st.tab = 'discover'; // 18+ only
-  await ({ discover, arcade: av => arcadeView(av, st.me), roulette: rv => rouletteView(rv, st.me), inbox, onboard, profile, shop, help: hv => helpView(hv, st.me), ...(ADMIN ? { dev } : {}) })[st.tab]?.(v);
+  const v = $('#view'); if (st.tab !== 'arcade') stopArcade(); if (st.tab !== 'friends') FLUI.leave(); // friend link burns when its page closes if (st.tab === 'roulette' && !rouletteVisible(st.me)) st.tab = 'discover'; // 18+ only
+  await ({ discover, friends: fv => { fv.innerHTML = FLUI.section(st) + IU.friendsSection(); IU.wireFriends(fv, st, render); FLUI.wire(fv, st, render); }, arcade: av => arcadeView(av, st.me), roulette: rv => rouletteView(rv, st.me), inbox, onboard, profile, shop: sv => SHOP.shopView(sv, st, render), help: hv => helpView(hv, st.me), ...(ADMIN ? { dev } : {}) })[st.tab]?.(v);
 }
 
 const unitOf = p => prefFor(p, 'dating').unit || D.unitFor(p.countryCode);
@@ -179,6 +194,10 @@ function readDist(root) {
   return out;
 }
 
+// v33 Discover header for the current mode: age range, minimum %, compare style; gender filter chips ONLY in Dating.
+function matchBar(me, mode) { const r = MV.ageRangeFor(me, mode) || MV.clampRange(me, [null, null]), how = MV.compareFor(me, mode);
+  const gf = MV.GENDER_FILTER_MODES.includes(mode) && MV.datingOn(me) ? `<div class="row gap gfilter" data-gender-filter role="group" aria-label="Show me">${D.GENDERS.map(g => `<button type="button" class="chip small ${(me.seekingGenders || []).includes(g) ? 'on' : ''}" data-gf="${esc(g)}" aria-pressed="${(me.seekingGenders || []).includes(g)}">${esc(g)}</button>`).join('')}</div>` : '';
+  return `<div class="card small matchbar" data-matchbar="${mode}"><div class="row gap"><span class="grow">🎯 Ages ${r[0]}–${r[1]} · min ${MV.minFor(me, mode)}% · ${how === 'soft' ? 'soft' : 'hard'} compare</span><button type="button" class="small ghost" id="mb-edit">Edit</button></div>${gf ? `<div class="muted small">Show me (dating only):</div>${gf}` : ''}</div>`; }
 async function discover(v) {
   const me = st.me;
   const modes = DISC.visibleModes(me, D.MODES); // under 18: Dating tab not rendered at all
@@ -187,17 +206,33 @@ async function discover(v) {
   mesh()?.setDiscovery?.(st.mode, true); // mode-tagged discovery + relay duty only while searching
   const sn = st.mode === 'dating' && C0.safetyNoticeFor(me);
   const notIn = (sn ? `<div class="card warn small" data-safety-notice>🛡️ ${esc(sn)}</div>` : '') + (!me.lookingFor?.includes(st.mode) ? `<div class="card">You haven't enabled <b>${st.mode}</b> mode. <button id="enable">Enable it</button></div>` : '');
-  const ms = !me.lookingFor?.includes(st.mode) ? [] : findMatches(me, all, st.mode, D.QUESTIONS);
+  // v51: merge live-mesh soft→hard fullCache (hardReady) into Discover — local db list + peers that cleared both soft mins then hardScore
+  let ms = !me.lookingFor?.includes(st.mode) ? [] : MV.discoverList(me, all, st.mode, p => evaluate(me, p, st.mode, D.QUESTIONS)); // UX §5 (v33)
+  if (me.lookingFor?.includes(st.mode)) { const seen = new Set(ms.map(x => x.profile?.code || x.profile?.id));
+    for (const h of (mesh()?.hardReady?.() || [])) { const id = h.code || h.profile?.code || h.profile?.id; if (!id || seen.has(id)) continue;
+      const e = evaluate(me, h.profile, st.mode, D.QUESTIONS); if (!e) continue; const pct = Math.round(((e.pct ?? h.pct) + (h.pct ?? e.pct)) / 2);
+      if (pct < MV.minFor(me, st.mode)) continue; seen.add(id); ms.push({ ...e, v2: h.pct, pct, how: h.how || MV.compareFor(me, st.mode), live: 1 }); }
+    ms.sort((a, b) => b.pct - a.pct); }
+  const dvMode = DV.getMode();
   const now = Date.now(), isOn = p => recency(demoLastSeen(p.id, now), now) === 'online';
   const online = ms.filter(x => isOn(x.profile)), offline = ms.filter(x => !isOn(x.profile) && recency(demoLastSeen(x.profile.id, now), now));
   v.innerHTML = MU.discoverSection() + `<div class="modes">${modes.map(m => `<button data-m="${m}" class="${st.mode === m ? 'on' : ''}">${D.MODE_LABEL[m]}</button>`).join('')}</div>
   <div class="card small row gap">📍 ${esc(me.city || '?')}${me.region ? ', ' + esc(me.region) : ''} ${esc(me.countryCode || '')} · Range for ${st.mode}: ${distControl(me, st.mode)}</div>
-  ${notIn}
+  ${notIn}${me.lookingFor?.includes(st.mode) ? matchBar(me, st.mode) : ''}
   <p class="banner">⚡ Connect now, make plans for tomorrow. Full profiles are visible only while people are online.</p>
   ${ms.length ? '' : (!me.lookingFor?.includes(st.mode) ? '' : '<div class="card">No matches yet in this mode. Add more games/interests to your profile, or widen your range above.</div>')}
-  ${online.length ? `<h3>🟢 Online now (${online.length})</h3>${online.map(x => card(x, unitOf(me))).join('')}` : ms.length ? '<div class="card">Nobody from your matches is online right now — check back soon.</div>' : ''}
+  ${me.lookingFor?.includes(st.mode) ? DV.toggleHTML(dvMode) : ''}<div id="dv-swipe"></div>${st.mode === 'gaming' ? '<div id="lfg"></div>' : ''}${st.mode === 'friends' ? '<div id="events"></div>' : ''}
+  ${dvMode === 'swipe' ? '' : online.length ? `<h3>🟢 Online now (${online.length})</h3>${online.map(x => card(x, unitOf(me))).join('')}` : ms.length ? '<div class="card">Nobody from your matches is online right now — check back soon.</div>' : ''}
   ${offline.length ? `<h3 class="muted">Recently online</h3>${offline.map(x => stubCard(x.profile)).join('')}` : ''}`;
   v.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { st.mode = b.dataset.m; render(); });
+  v.querySelectorAll('[data-gf]').forEach(b => b.onclick = async () => { if (st.mode !== 'dating') return; const g = b.dataset.gf, cur = new Set(me.seekingGenders || []); cur.has(g) ? cur.delete(g) : cur.add(g); if (!cur.size) return toast('Pick at least one'); me.seekingGenders = D.GENDERS.filter(x => cur.has(x)); await db.upsertProfile(me); render(); });
+  $('#mb-edit', v)?.addEventListener('click', () => { st.tab = 'profile'; render(); setTimeout(() => document.getElementById('mprefs')?.scrollIntoView({ block: 'start' }), 300); });
+  v.querySelectorAll('[data-dv]').forEach(b => b.onclick = () => { DV.setMode(b.dataset.dv); render(); });
+  if (dvMode === 'swipe') { st.dvSeen ||= new Set(); const deck = new DV.SwipeDeck(online.filter(x => !st.dvSeen.has(x.profile.id)), { slots: 8, pool: ms.filter(x => !st.dvSeen.has(x.profile.id) && !isOn(x.profile)), // cm-v35: pass refills the slot with the next best match
+      onPass: x => { st.dvSeen.add(x.profile.id); mesh()?.pass?.(x.profile.code || x.profile.id); }, onLike: x => { st.dvSeen.add(x.profile.id); if (x.profile.code) mesh()?.like?.(x.profile.code); st.tab = 'inbox'; st.chatWith = x.profile.id; render(); } });
+    DV.swipeView($('#dv-swipe', v), deck, { cardHTML: x => card(x, unitOf(me)), onOpen: x => { const c = x.profile.code, m = mesh(); if (!c || !m?.openProfile) { st.tab = 'inbox'; st.chatWith = x.profile.id; return render(); } // UX §8: full profile only on tap, behind "Loading their profile..." + online check
+      DV.loadingProfile($('#dv-swipe', v), () => m.openProfile(c), { onBack: () => render(), onTalk: () => { m.like?.(c); st.tab = 'inbox'; st.chatWith = x.profile.id; render(); } }); } }); }
+  { const meC = { ...me, code: mesh()?.code || me.id }, tr = mesh()?.arcade; if ($('#lfg', v)) UX.lfgSection($('#lfg', v), meC, tr).catch(() => {}); if ($('#events', v)) UX.eventsSection($('#events', v), meC, tr).catch(() => {}); }
   v.querySelectorAll('[data-chat]').forEach(b => b.onclick = () => { st.tab = 'inbox'; st.chatWith = b.dataset.chat; render(); });
   wireHandoff(v); MU.wireDiscover(v, st, render); IU.recentSection(v.querySelector('#recentlist'), st.me, st.mode).catch(() => {});
   v.querySelectorAll('.distctl select, .distctl input').forEach(el => el.onchange = async () => { me.distPrefs = { ...(me.distPrefs || D.defaultDist(me.countryCode)), ...readDist(v) }; await db.upsertProfile(me); render(); });
@@ -279,7 +314,9 @@ const show = (f, v) => { if (v == null || v === '' || (Array.isArray(v) && !v.fi
 // Downscale to ≤480px JPEG so photos fit in local storage.
 function toThumb(file) { return new Promise(res => { const img = new Image(); img.onload = () => { const k = Math.min(1, 480 / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = img.width * k; c.height = img.height * k; c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', 0.72)); URL.revokeObjectURL(img.src); }; img.src = URL.createObjectURL(file); }); }
 function wireExtras(root, p, rerender) {
-  root.querySelector('input[type=file]')?.addEventListener('change', async e => { const f = e.target.files[0]; if (!f) return; p.photos = [...(p.photos || []), await toThumb(f)].slice(0, 3); rerender(); });
+  root.querySelector('input[type=file]')?.addEventListener('change', async e => { const f = e.target.files[0]; if (!f) return; const r = await PH.addPhoto(p, await toThumb(f)); if (r.notice) { st.rollingNotice = r.notice; toast('📸 ' + r.notice); } rerender(); });
+  { const el = root.querySelector('[data-rolling]'); if (el) PH.allPhotos(p).then(all => { const extra = all.length - (p.photos || []).length; if (extra > 0) { el.hidden = false; el.textContent = `📸 ${(p.photos || []).length} shown + ${extra} more on this phone only. ${PH.ROLLING_NOTICE}`; } }).catch(() => {}); }
+  root.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => { p.avatarPreset = b.dataset.preset; p.thumb = PH.presetURL(b.dataset.preset); rerender(); });
   root.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { p.photos.splice(+b.dataset.del, 1); rerender(); });
   root.querySelectorAll('[data-photoreveal]').forEach(s => s.onchange = () => p.photoReveal = s.value);
   root.querySelectorAll('[data-gps]').forEach(b => b.onclick = () => { b.textContent = '📍 Locating…'; locate(p).then(() => rerender(), e => { b.textContent = '📍 ' + e; }); });
@@ -300,7 +337,7 @@ async function onboard(v) {
   v.innerHTML = `<div class="onb">
     <div class="progress"><i style="width:${pct}%"></i></div>
     <div class="row between muted small"><span>${st.step + 1} of ${steps.length}</span><button class="link" id="toreview">Review all</button></div>
-    <h2 class="q">${esc(f.label)}</h2><p class="ask">${esc(f.ask)}</p>
+    ${st.missNote ? `<div class="card warn small" id="pf-required">${esc(st.missNote)}</div>` : ''}<h2 class="q">${esc(f.label)}</h2><p class="ask">${esc(f.ask)}</p>
     <div class="voice row gap"><button id="say" class="ghost" title="Read aloud">🔊</button>${canListen ? '<button id="mic" class="mic">🎙️ Tap & speak</button>' : '<span class="muted small">Voice input isn’t supported in this browser — tap or type.</span>'}</div>
     <p id="heard" class="heard"></p>
     <div id="fld" class="fld">${fieldHTML(f, get(d, f.k))}</div>
@@ -324,7 +361,7 @@ async function onboard(v) {
   $('#toreview').onclick = () => { save(); st.step = flow(d).length; render(); };
   $('#prev').onclick = () => { save(); st.step--; render(); };
   $('#skip').onclick = () => { st.step++; render(); };
-  $('#next').onclick = () => { save();
+  $('#next').onclick = () => { save(); st.missNote = null;
     if (f.k === 'name' && !d.name) return alert('Pick a name to continue.');
     if (f.k === 'age' && d.age != null && d.age < 18) return alert('Cybermates is 18+ only.');
     st.step = flow(d).indexOf(f) + 1; render(); };
@@ -345,6 +382,9 @@ async function review(v, steps) {
     if (p.age == null || p.age < 18) { alert('Cybermates is 18+ only — please add your age.'); st.step = flow(d).findIndex(f => f.k === 'age'); return render(); }
     if (!p.lookingFor?.length) p.lookingFor = ['friends', 'gaming'];
     geocodeLocal(p);
+    { const miss = missingProfile({ ...p, countryCode: p.countryCode || (p.city ? 'US' : '') }); if (miss.length) { // UX §2.5: cannot proceed until the profile is complete
+      const STEP = { name: 'name', age: 'age', gender: 'gender', lookingFor: 'lookingFor', location: 'loc', interests: 'interests', photo: 'photos', seekingGenders: 'seekingGenders' };
+      st.extras = st.extras || false; const i = flow(d).findIndex(f => f.k === STEP[miss[0]]); st.missNote = 'Finish your profile to continue: ' + miss.join(', '); st.step = i >= 0 ? i : 0; return render(); } }
     p.countryCode = (p.countryCode || 'US').toUpperCase().slice(0, 2); p.distPrefs = p.distPrefs || D.defaultDist(p.countryCode);
     p.reveal = p.reveal || {};
     await db.upsertProfile(await withThumb(p)); await db.setCurrentUserId(p.id); st.draft = null; st.step = 0; st.extras = false; st.tab = 'discover'; render();
@@ -357,12 +397,16 @@ async function profile(v) {
   const lvl = (key, cur) => `<select data-rv="${esc(key)}">${[['public', '🌐 Everyone'], ['match', '🤝 After mutual match'], ['hidden', '🙈 Hidden']].map(([k, l]) => `<option value="${k}" ${cur === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
   v.innerHTML = IU.moodProfileCard() + `<div class="card"><div class="row">${avatar(p, 72, { self: true })}<div class="grow"><h2>${esc(p.name)} ${verified(p)}</h2><div class="muted small">📍 ${esc(p.location || 'No location yet')}</div><div class="row gap"><button type="button" id="geo">📍 Update location</button><button type="button" id="guided" class="ghost">✨ Guided edit</button></div></div></div></div>
   <div class="card verify"><b>✔ Get verified</b> <span class="tag">Coming soon</span><p class="muted small">Verified badges will mean a real-photo selfie check (AI liveness) and optional ID verification. Preview only — nothing is checked yet.</p></div>
-  <form id="pf">
+  <form id="pf" novalidate>
   <div class="card"><h4>🔒 Sensitive info (optional)</h4><label class="small"><input type="checkbox" id="sens-opt" ${p.sensitiveOptIn ? 'checked' : ''}> Let me add religion / orientation. Stored only on this phone; never sent to our servers, analytics or AI.</label><br><label class="small"><input type="checkbox" id="sens-show" ${p.showSensitive ? 'checked' : ''}> Show them on my own profile card (local only)</label>${C0.orientationRisk(p.countryCode) ? `<p class="warn small">⚠️ ${C0.ORIENTATION_WARNING}</p>` : ''}</div>
   <div class="card"><h4>📏 Distance per mode</h4>${D.MODES.map(m => `<div class="row gap"><b style="width:90px">${D.MODE_LABEL[m]}</b>${distControl(p, m)}</div>`).join('')}<p class="muted small">Defaults: Friends same state/region, Gaming global, Dating 50 mi (80 km outside US/UK). Both people's ranges must include each other.</p></div>
   <div class="card"><h4>🔒 Privacy: who sees each account</h4>${accts.map(a => `<div class="row gap"><span class="grow">${esc(a.platform)}: ${esc(a.handle)}</span>${lvl(a.kind + '.' + a.platform, a.level)}</div>`).join('') || '<p class="muted small">Add gamer tags / socials below first.</p>'}
     ${p.discordInvite ? `<div class="row gap"><span class="grow">Discord server invite</span>${lvl('discordInvite', p.reveal?.discordInvite || 'match')}</div>` : ''}</div>
-  ${F.filter(f => !f.when || f.when(p)).map(f => `<div class="card"><h4>${esc(f.label)}</h4>${fieldHTML(f, get(p, f.k))}</div>`).join('')}<button class="primary wide">Save profile</button></form>`;
+  ${F.filter(f => f.k !== 'ageRange' && (f.when === dating ? !DISC.isMinor(p) : !f.when || f.when(p))).map(f => `<div class="card"${f.when === dating ? ` data-dating-only${MV.datingOn(p) ? '' : ' hidden'}` : ''}><h4>${esc(f.label)}</h4>${fieldHTML(f, get(p, f.k))}</div>`).join('')}${UX.prefsCard(p)}${UX.favGamesHTML(p)}<button class="primary wide">Save profile</button></form>
+  <div class="card"><button type="button" id="modq" class="ghost">⚑ Reports & moderation queue</button><div id="modq-v"></div></div>`;
+  { const miss = missingProfile(st.me); if (miss.length) v.insertAdjacentHTML('afterbegin', `<div class="card warn" id="pf-required">Finish your profile to continue: <b>${miss.map(esc).join(', ')}</b></div>`); }
+  UX.wirePrefs(v); UX.wireFavGames(v, st.me, async () => { await db.upsertProfile(st.me); profile(v); });
+  $('#modq').onclick = async () => { const R = await import('./reports.js'); R.modQueueView($('#modq-v'), { onBlock: c => mesh()?.block?.(c) }); };
   v.querySelectorAll('.distctl [data-d=scope]').forEach(sel => sel.onchange = () => sel.parentElement.querySelectorAll('[data-d=value],[data-d=unit]').forEach(x => x.style.display = sel.value === 'radius' ? '' : 'none'));
   $('#geo').onclick = () => locate(st.me).then(async me => { await db.upsertProfile(me); toast('Location saved: ' + me.location); render(); }, e => alert(e));
   $('#guided').onclick = () => { st.draft = null; st.step = 0; st.tab = 'onboard'; render(); };
@@ -375,6 +419,7 @@ async function profile(v) {
     p.sensitiveOptIn = !!$('#sens-opt')?.checked; p.showSensitive = p.sensitiveOptIn && !!$('#sens-show')?.checked;
     if (p.sensitiveOptIn && !st.me.sensitiveOptIn && C0.orientationRisk(p.countryCode) && !confirm(C0.ORIENTATION_WARNING + '\n\nContinue anyway?')) p.sensitiveOptIn = p.showSensitive = false;
     if (!p.sensitiveOptIn) { delete p.religion; delete p.orientation; }
+    { const r = UX.readPrefs(v, p); if (r.droppedInterests) toast(`Interests are capped at ${MV.INTEREST_CAP} — ${r.droppedInterests} removed`); p.favGames = st.me.favGames || []; p.avatarPreset = st.me.avatarPreset; if (st.me.avatarPreset && !(st.me.photos || []).length) p.thumb = st.me.thumb; }
     geocodeLocal(p); await db.upsertProfile(await withThumb(p)); toast('Saved ✓'); render();
   };
   v.append(T.lookPanel());
@@ -410,18 +455,20 @@ async function dev(v) {
 }
 
 // new user flow: when current user is missing, onboarding renders without st.me
-const _render = render; let termsOk = false, jacked = false, joiningAs = null, noticeShown = false;
+const _render = render; let termsOk = false, gateMinor = false, jacked = false, joiningAs = null, noticeShown = false, rotated = false;
 render = async function () {
   const step = n => globalThis.__cmStep?.(n);
-  if (!termsOk) { step('load-settings'); const { getVault } = await import('./settings-ui.js'); { step('load-compliance'); const C = await import('./compliance.js'); const v0 = await getVault(); step('age-status'); const ag = await C.ageStatus(v0); step('age-gate'); if (!ag?.adult) await C.ageGateScreen(v0, { blocked: ag && !ag.adult }); } step('terms'); const { needsTerms, termsScreen } = await import('./terms.js'); const v = await getVault(); if (await needsTerms(v)) await termsScreen(v); termsOk = true; }
+  if (!termsOk) { step('load-settings'); const { getVault } = await import('./settings-ui.js'); { step('load-compliance'); const C = await import('./compliance.js'); const v0 = await getVault(); step('age-status'); const F = await import('./ftue.js'); if (F.ftueResetActive()) { F.resetLocalFtue(); await F.clearVaultFtue(v0); } /* TESTING: replay every first-time flow */ const ag = await C.ageStatus(v0); step('age-gate'); if (!ag) await C.ageGateScreen(v0); gateMinor = !!(await C.ageStatus(v0))?.minor; } step('terms'); const { needsTerms, termsScreen } = await import('./terms.js'); const v = await getVault(); if (await needsTerms(v)) await termsScreen(v); step('device-key'); await ensureDeviceKey(v).catch(e => console.warn('device key', e)); termsOk = true; { const F = await import('./ftue.js'); if (F.shouldWarnLoss(F.countLogin())) await F.accountLossWarning(); } }
   step('profile-load'); const id = await db.getCurrentUserId(); const p = await db.getProfile(id);
+  if (p && gateMinor && !DISC.isMinor(p)) { p.minor = true; await db.upsertProfile(p); }
+  if (p && !rotated) { rotated = true; try { const before = (p.photos || []).join('|'), win = await PH.rotate(p); if (win && win.join('|') !== before) { await db.upsertProfile(await withThumb(p)); } } catch (e) { console.warn('photo rotate', e); } } // UX §3: rolling photos advance each login // birthday gate said under 18 -> minor mode (no Dating/Roulette)
   if (!p) { st.me = null; st.tab = 'onboard'; const app = $('#app'); app.innerHTML = `<header><b class="logo">${logoHTML()}<small>social mesh</small></b>${T.headerToggles()}<span class="who">Let's set you up</span></header><main id="view"></main>`; T.wireHeader(app); return onboard($('#view')); }
   step('p2p'); try { bootP2P(id); } catch (e) { console.warn('p2p boot', e); }
   step('app');
   if (!noticeShown) { noticeShown = true; import('./settings-ui.js').then(async S => noticeBanner(await blockedReason(await S.getVault()))); }
   if ((!mesh() || mesh().asKey !== p.id) && joiningAs !== p.id && !killState()) {
     joiningAs = p.id;
-    const go = (status = () => {}) => startMesh({ me: p, asKey: p.id, db, onChange: meshRefresh, onStatus: status, onNotice: noticeBanner }).then(async m => { meshRefresh(); status('SCANNING FOR PEERS'); { let n = 0; const t = setInterval(() => { if (++n > 120) return clearInterval(t); if (document.getElementById('jackin') || document.getElementById('tm-ok') || document.getElementById('ag-dob')) return; clearInterval(t); IU.maybeAskMood(p); }, 500); } for (let i = 0; i < 15 && !m.online().length; i++) await new Promise(r => setTimeout(r, 100)); status(m.online().length ? m.online().length + ' PEER(S) ONLINE' : 'NO PEERS YET · LISTENING'); return m; }).finally(() => { joiningAs = null; });
+    const go = (status = () => {}) => startMesh({ me: p, asKey: p.id, db, onChange: meshRefresh, onStatus: status, onNotice: noticeBanner }).then(async m => { meshRefresh(); if (navigator.onLine !== false) import('./signin.js').then(async S => S.restore(await S.deviceCtx())).catch(() => {}); /* optional sign-in: restore session; none/offline => mesh-only */ status('SCANNING FOR PEERS'); { let n = 0; const t = setInterval(() => { if (++n > 120) return clearInterval(t); if (document.getElementById('jackin') || document.getElementById('tm-ok') || document.getElementById('ag-dob')) return; clearInterval(t); IU.maybeAskMood(p); }, 500); } for (let i = 0; i < 15 && !m.online().length; i++) await new Promise(r => setTimeout(r, 100)); status(m.online().length ? m.online().length + ' PEER(S) ONLINE' : 'NO PEERS YET · LISTENING'); return m; }).finally(() => { joiningAs = null; });
     if (!jacked) { jacked = true; jackIn(go, { onTimeout: () => { if (!killState() && !document.getElementById('bannotice')) toast('⚠️ Offline — mesh not reachable yet. Retrying in the background…'); } }).catch(e => console.warn('mesh', e)); }
     else go().catch(e => console.warn('mesh', e));
   }

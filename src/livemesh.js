@@ -4,8 +4,8 @@
 //  - PRESENCE: signed SOFT-TAG packet (a few compact soft numbers, ~200-300 B). Rebroadcast forever to the bucket, staggered
 //    (random start offset + jitter), adaptive interval (MIN when the bucket is churning, backs off to MAX when stable),
 //    piggybacked onto any other packet already going to that peer in the current window.
-//  - FULL PROFILE: never circulates. Only sent on request (pget -> pfull) when someone taps to open it; the reply doubles
-//    as the online check ("Loading their profile..." screen in discover-view.js).
+//  - FULL PROFILE: never floods the mesh. Sent on request (pget -> pfull) when someone taps OR (v51) when soft match
+//    clears BOTH sides' per-mode mins — then hard-checked locally before Discover may show them.
 //  - TENTACLES: each tick a node asks one random bucket member (or a random rendezvous peer) for its best few peers; any that
 //    beat the weakest bucket member are pulled in and the weakest dropped. Clumps of like-minded people form.
 //  - SWIPE: left = pass(): drop from bucket, never re-admit, send 'cut' (they drop us too), tentacle refills the slot.
@@ -17,6 +17,8 @@
 import { signProfile, verifyProfile } from './mesh.js';
 import { ConnCap } from './conncap.js';
 import { PER_SENDER, fixedSize } from './shield.js';
+import { minFor, DEFAULT_MIN, score as hardScore, fromPacket, matchPacket, compareFor } from './match-v2.js';
+export { DEFAULT_MIN, minFor }; // v51: Discover / search share these
 export const BUCKET_MAX = 200, TENT_K = 6, MIN_IV = 4e3, MAX_IV = 60e3, SEARCH_TTL = 4, SEARCH_FAN = 4, PGET_TIMEOUT = 4000, SOFT_PKT_MAX = 512;
 export const DIMS = ['gamer', 'platforms', 'ballSports', 'outdoor', 'events', 'music', 'religious', 'job', 'drinks', 'smokes', 'kids', 'left', 'right', 'night', 'pets', 'travel'];
 const W = { // per-mode weight of each soft dimension (UX §5: gaming = gaming fields; friends low religion; dating full)
@@ -35,14 +37,19 @@ export function softTags(p = {}) { const f = { ...p, ...(p.f || {}), ...(p.mp?.f
     /agnostic|atheist|^$|prefer/.test(String(f.religion || '').toLowerCase()) ? 0 : 3, f.job && f.job !== 'none' ? 3 : 0, f.drinking === 'yes' ? 3 : f.drinking === 'sometimes' ? 2 : 0, f.smoking === 'yes' ? 3 : 0, f.kids === 'yes' ? 3 : 0,
     f.politics === 'liberal' ? 3 : 0, f.politics === 'conservative' ? 3 : 0, 0, 0, 0];
   const minor = p.minor === true || (Number.isFinite(age) && age < 18), modes = (p.lookingFor || []).filter(m => !(minor && m === 'dating'));
-  return { b: minor ? 'm' : 'a', m: modes.reduce((s, m) => s | (MODE_BIT[m] || 0), 0), g: String(p.gender || '').slice(0, 1), a: Number.isFinite(age) ? ageBucket(age) : 2, o: lv(f.games) ? 1 : 0, v: encodeVec(v) }; }
+  // v51: per-mode min % rides with soft tags so BOTH sides' mins can be checked before a full-profile exchange
+  const n = [minFor(p, 'dating'), minFor(p, 'friends'), minFor(p, 'gaming')];
+  return { b: minor ? 'm' : 'a', m: modes.reduce((s, m) => s | (MODE_BIT[m] || 0), 0), g: String(p.gender || '').slice(0, 1), a: Number.isFinite(age) ? ageBucket(age) : 2, o: lv(f.games) ? 1 : 0, v: encodeVec(v), n }; }
 // Soft match 0..100, or null when they may never be matched (cross band, mode off, dating gender filter).
+export const MODE_MIN_IDX = { dating: 0, friends: 1, gaming: 2 };
+export function softMinOf(tags, mode) { const i = MODE_MIN_IDX[mode]; if (i == null) return DEFAULT_MIN[mode] ?? 0; const n = tags?.n; const v = Array.isArray(n) ? Number(n[i]) : Number(n?.[mode]); return Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : (DEFAULT_MIN[mode] ?? 0); }
+export function softClearsBoth(score, me, them, mode) { if (score == null) return false; return score >= softMinOf(me, mode) && score >= softMinOf(them, mode); }
 export function softMatch(me, them, mode = 'friends', seek = null) {
   if (!me || !them || me.b !== them.b) return null; const bit = MODE_BIT[mode] || 1; if (!(me.m & bit) || !(them.m & bit)) return null;
   if (mode === 'dating' && (me.b === 'm' || (seek?.length && !seek.includes(them.g)))) return null;
-  const a = decodeVec(me.v), c = decodeVec(them.v), w = W[mode] || W.friends; let s = 0, t = 0;
-  for (let i = 0; i < DIMS.length; i++) { s += w[i] * (1 - Math.abs(a[i] - c[i]) / 3); t += w[i]; }
-  const S = s / (t || 1); return Math.round(100 * S * S); } // squared: spreads 'random stranger' (~35%) from 'same nest' (~75-95%)
+  const a = decodeVec(me.v), c = decodeVec(them.v), w = W[mode] || W.friends; let s = 0, tot = 0;
+  for (let i = 0; i < DIMS.length; i++) { s += w[i] * (1 - Math.abs(a[i] - c[i]) / 3); tot += w[i]; }
+  return Math.round(100 * (s / (tot || 1)) ** 2); } // squared: spreads 'random stranger' (~35%) from 'same nest' (~75-95%)
 export const pktBytes = o => new TextEncoder().encode(JSON.stringify(o)).length;
 export const POWER = { normal: { iv: 1, fan: 1, ttl: SEARCH_TTL }, saver: { iv: 3, fan: .5, ttl: 2 }, critical: { iv: 6, fan: .25, ttl: 1 } };
 export function powerLevel({ battery = 1, charging = false, saveData = false, metered = false } = {}) { if (charging && !saveData) return 'normal'; if (battery < .15) return 'critical'; if (battery < .3 || saveData || metered) return 'saver'; return 'normal'; }
@@ -51,6 +58,8 @@ export class LiveNode {
     Object.assign(this, { timer, code, keys, mode, seek, now, rand, isBanned, isBlocked, isOnline, bucketMax, rendezvous, onEvent, out: send });
     this.tags = softTags(profile); this.full = full || profile; this.rev = 0; this.sign();
     this.bucket = new Map(); // code -> { sp, pub, score, at }
+    this.fullCache = new Map(); // code -> hard-checked full profile (v51 soft→hard)
+    this.softPassed = new Set(); // codes whose soft score cleared both mins
     this.pins = new Map(); this.rejected = new Set(); this.liked = new Set(); this.waiters = new Map(); this.seenQ = new Set(); this.results = new Map();
     this.cap = new ConnCap({ target: bucketMax, max: capMax ?? bucketMax * 2, now, pinned: c => this.bucket.has(c) });
     this.rate = new Map(); this.stats = { sent: 0, bytes: 0, piggy: 0, maxPkt: 0, dropped: { band: 0, sig: 0, rate: 0, block: 0, size: 0 } };
@@ -73,9 +82,17 @@ export class LiveNode {
     const pin = this.pins.get(c); if (pin && pin !== p.k && !(bk && bk === p.k)) { D.sig++; return null; }
     if (!verifyProfile(sp, p.k)) { D.sig++; return null; } this.pins.set(c, p.k); return sp; }
   consider(p) { const sp = this._admit(p); if (!sp) return false; const c = sp.code, s = softMatch(this.tags, sp.profile, this.mode, this.seek); if (s == null) return false;
+    if (softClearsBoth(s, this.tags, sp.profile, this.mode)) { this.softPassed.add(c); if (!this.fullCache.has(c) && !this._fullPending?.has(c)) this._requestFull(c); } // v51: soft→hard
     const cur = this.bucket.get(c); if (cur) { cur.at = this.now(); if (sp.rev >= cur.sp.rev) { cur.sp = sp; cur.score = s; } return false; }
     if (this.bucket.size >= this.bucketMax) { const w = this.weakest(); if (!w || w.score >= s) return false; this.bucket.delete(w.code); this.cap.drop(w.code); }
     this.bucket.set(c, { sp, pub: p.k, score: s, at: this.now() }); for (const x of this.cap.touch(c)) this.bucket.delete(x); this.churn++; return true; }
+  _requestFull(c) { (this._fullPending ||= new Set()).add(c);
+    this.openProfile(c).then(r => { this._fullPending.delete(c); if (!r?.online || !r.profile) return;
+      // Hard check locally before Discover may show them (deal breakers / soft-vs-hard / hidden penalty).
+      const full = { ...r.profile, id: c, code: c, age: r.profile.age ?? (this.bucket.get(c)?.sp?.profile?.a), minor: this.tags.b === 'm' || r.profile.minor };
+      const meFull = this.full || {}; const how = compareFor(meFull, this.mode); const pct = hardScore(meFull, full, this.mode, { how });
+      if (pct == null || pct < softMinOf(this.tags, this.mode)) return; // hard failed or below my min — do not surface
+      this.fullCache.set(c, { profile: full, pct, how, at: this.now() }); this.onEvent('full', c, pct); }).catch(() => this._fullPending?.delete(c)); }
   weakest() { let w = null; for (const [code, e] of this.bucket) if (!w || e.score < w.score) w = { code, score: e.score }; return w; }
   avgMatch() { let s = 0; for (const e of this.bucket.values()) s += e.score; return this.bucket.size ? s / this.bucket.size : 0; }
   top(n = TENT_K, forTags = this.tags, mode = this.mode, seek = null, exclude) { const out = []; for (const e of this.bucket.values()) { if (e.sp.code === exclude) continue; const s = softMatch(forTags, e.sp.profile, mode, seek); if (s != null) out.push([s, e]); } return out.sort((a, b) => b[0] - a[0]).slice(0, n).map(x => ({ sp: x[1].sp, k: x[1].pub })); }
@@ -91,7 +108,8 @@ export class LiveNode {
   pass(c) { this.rejected.add(c); this.bucket.delete(c); this.cap.drop(c); this.churn += 3; this._send(c, { t: 'cut' }); this.nextAt = this.now(); this.onEvent('passed', c); }
   like(c) { this.liked.add(c); this.onEvent('liked', c); return { code: c, wantsToTalk: true }; }
   // ---- search: criteria { mode, gender (dating only), gaming (1|0), min }. Age band is always MY band (never selectable).
-  search(crit = {}, onResult = () => {}) { const q = { id: this.code + ':' + Math.floor(this.rand() * 1e9).toString(36), crit: { mode: crit.mode || this.mode, min: crit.min ?? 0, ...(crit.mode === 'dating' && crit.gender ? { g: crit.gender } : {}), ...(crit.gaming != null ? { o: crit.gaming ? 1 : 0 } : {}), ...(crit.age != null ? { a: crit.age } : {}) }, src: this.pkt, ttl: Math.min(SEARCH_TTL, this.P.ttl), hop: 0 };
+  search(crit = {}, onResult = () => {}) { const mode = crit.mode || this.mode; const min = crit.min != null ? crit.min : softMinOf(this.tags, mode); // v51: never default to 0 when profile/DEFAULT_MIN exists
+    const q = { id: this.code + ':' + Math.floor(this.rand() * 1e9).toString(36), crit: { mode, min, ...(mode === 'dating' && crit.gender ? { g: crit.gender } : {}), ...(crit.gaming != null ? { o: crit.gaming ? 1 : 0 } : {}), ...(crit.age != null ? { a: crit.age } : {}) }, src: this.pkt, ttl: Math.min(SEARCH_TTL, this.P.ttl), hop: 0 };
     this.seenQ.add(q.id); this.results.set(q.id, { onResult, found: new Map() }); for (const m of this._local(q)) this._hit(q.id, m, 0); this._fwd(q); return q.id; }
   _match(q, e) { const cr = q.crit, tg = e.sp.profile, s = softMatch(q.src.sp.profile, tg, cr.mode, cr.g ? [cr.g] : null); if (s == null || s < cr.min) return null; if (cr.o != null && tg.o !== cr.o) return null; if (cr.a != null && tg.a !== cr.a) return null; return s; }
   _local(q) { const out = []; for (const e of this.bucket.values()) { if (e.sp.code === q.src.sp.code) continue; const s = this._match(q, e); if (s != null) out.push({ sp: e.sp, k: e.pub, s }); } return out.sort((a, b) => b.s - a.s).slice(0, 10); }
