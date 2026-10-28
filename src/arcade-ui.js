@@ -15,6 +15,7 @@ import { ProximityVoice, VIEW_W, VIEW_H, band } from './arcade/proximity.js';
 import * as FX from './arcade/fx.js';
 import * as DG from './arcade/games/drawguess.js';
 import { RoundChat } from './arcade/match.js';
+import { PresenceSync } from './arcade/presence-sync.js';
 import { matchView, stopMatch } from './match-ui.js';
 import { brawlView, stopBrawl } from './brawl-ui.js';
 import { partyView, stopParty, mountVoice } from './party-ui.js';
@@ -24,7 +25,7 @@ import { THEMES, theme } from './theme.js';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const MASS_GAMES = [['snake', '🐍 Snake'], ['tron', '🏍 Light cycles'], ['megaship', '🚀 Mega Fleet'], ['drawguess', '✏️ Draw & Guess'], ['brawl', '💥 Brawl'], ['bingo', '🎱 Bingo'], ['mtrivia', '❓ Mass Trivia']];
 const GAMES = { snake, tron, megaship }, lobbies = {}, voiceOn = new Map();
-let timer = null, rafGen = 0, px = null, vh = null; const vPeers = new Map();
+let timer = null, rafGen = 0, px = null, vh = null, ps = null; const vPeers = new Map();
 globalThis.__cmProx = () => px && { enabled: px.enabled, inRange: [...px.inRange], gains: Object.fromEntries(px.gains), hub: vh ? vh.hub.stats() : null, counts: vh ? { ...vh.hub.counts } : null }; // v44 test hook (read-only)
 import { pttHTML, startVoice } from './voice-ui.js';
 let cur = { tab: new URLSearchParams(globalThis.location?.search || '').get('arcmode') || 'mass', game: new URLSearchParams(globalThis.location?.search || '').get('arcgame') || 'snake' }, t3 = null;
@@ -33,7 +34,7 @@ const lobby = (g, me) => { const k = g === 'drawguess' ? g + '|' + band(me) : g;
 const remoteTheme = new Map(); // code -> theme id announced in 'arc' join
 export const themeHex = code => FX.themeAccent(remoteTheme.get(code) || THEMES[[...String(code)].reduce((a, c) => a + c.charCodeAt(0), 0) % THEMES.length][0]); // remote players' own theme (bots: pseudo-random theme)
 let stopMega = null; // set once megafleet-ui.js is loaded
-export function stopArcade() { stopMega?.(); px?.detach(); vh?.stop(); vh = null; clearInterval(timer); timer = null; t3?.dispose?.(); t3 = null; stopMatch(); stopBrawl(); stopParty(); const m = mesh(); if (m && cur.joined) m.arcade?.send({ g: cur.game, op: 'leave' }); }
+export function stopArcade() { stopMega?.(); ps?.stop(); ps = null; px?.detach(); vh?.stop(); vh = null; clearInterval(timer); timer = null; t3?.dispose?.(); t3 = null; stopMatch(); stopBrawl(); stopParty(); const m = mesh(); if (m && cur.joined) m.arcade?.send({ g: cur.game, op: 'leave' }); }
 export function arcadeView(v, me) { stopArcade();
   v.innerHTML = `<div class="arcade"><div class="modes arc-tabs">${[['1v1', '1v1'], ['2v2', '2v2'], ['4v4', '4v4'], ['mass', 'Mass Arena']].map(([k, l]) => `<button data-arctab="${k}" class="${cur.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div><div id="arc-body"></div></div>`;
   v.querySelectorAll('[data-arctab]').forEach(b => b.onclick = () => { cur.tab = b.dataset.arctab; arcadeView(v, me); });
@@ -52,23 +53,35 @@ function massView(v, me) {
     const tabs = `<div class="modes">${MASS_GAMES.map(([k, l]) => `<button data-game="${k}" class="${k === 'megaship' ? 'on' : ''}">${l}</button>`).join('')}</div>`;
     return import('./megafleet-ui.js').then(MF => { stopMega = MF.stopMegaFleet; if (!v.isConnected) return; MF.megaFleetView(v, me, { tabs }); v.querySelectorAll('[data-game]').forEach(b => b.onclick = () => { stopArcade(); cur.game = b.dataset.game; massView(v, me); }); }); }
   const g = cur.game, L = lobby(g, me); const w = L.join(myCode, { name: me?.name || 'you', minor: isMinor(me), adult: !isMinor(me) }); cur.joined = true;
-  const m = mesh(); m?.arcade?.listen((from, b) => { if (b.g !== cur.game) return; const LL = lobby(b.g, me); if (b.g === 'drawguess' && band(b) !== band(me)) return;
-    if (b.op === 'join') vPeers.set(from, { code: from, minor: !!b.minor }); if (b.theme) remoteTheme.set(from, b.theme); if (b.op === 'join' && !LL.where.has(from)) LL.join(from, { name: b.name || from.slice(0, 6), minor: !!b.minor, adult: !b.minor }); if (b.op === 'leave') LL.leave(from);
-    if (b.op === 'in') LL.where.get(from)?.input?.(from, b.dir, b.tick); if (b.op === 'dg') LL.where.get(from)?.move(from, b.m); if (b.op === 'shot' && b.s?.code === from) { const W = LL.where.get(from); if (W && W.ownerAt(b.s.x, b.s.y) === myCode) megaship.receiveShot(W, b.s, () => b.pub); } if ('voice' in b) voiceOn.set(from, !!b.voice); });
-  m?.arcade?.send({ g, op: 'join', sub: w.id, name: me?.name, minor: isMinor(me), voice: px.enabled, theme: theme() });
+  const m = mesh();
+  // v51: reply-to-join + silence prune so newcomers see existing peers (and vice versa)
+  ps?.stop(); ps = new PresenceSync({
+    send: pkt => m?.arcade?.send({ g, ...pkt, theme: theme(), voice: px.enabled }),
+    admit: (from, o) => { vPeers.set(from, { code: from, minor: !!o.minor }); if (!L.where.has(from)) return L.join(from, o); return L.where.get(from)?.players?.get?.(from) || null; },
+    leave: c => { vPeers.delete(c); L.leave(c); },
+    me: () => ({ code: myCode, name: me?.name || 'you', minor: isMinor(me), sub: w.id, theme: theme(), voice: px.enabled }),
+    sameBand: b => g !== 'drawguess' || band(b) === band(me),
+    isBlocked: c => !!m?.blocklist?.isBlocked(c),
+  }).start();
+  m?.arcade?.listen((from, b) => { if (b.g !== cur.game) return; const LL = lobby(b.g, me); if (b.g === 'drawguess' && band(b) !== band(me)) return;
+    if (b.theme) remoteTheme.set(from, b.theme);
+    if (b.op === 'join') ps?.onPeer(from, b); else if (b.op === 'leave') { ps?.lastSeen.delete(from); LL.leave(from); }
+    else { ps?.onActivity(from); if (b.op === 'in') LL.where.get(from)?.input?.(from, b.dir, b.tick); if (b.op === 'dg') LL.where.get(from)?.move(from, b.m); if (b.op === 'shot' && b.s?.code === from) { const W = LL.where.get(from); if (W && W.ownerAt(b.s.x, b.s.y) === myCode) megaship.receiveShot(W, b.s, () => b.pub); } if ('voice' in b) voiceOn.set(from, !!b.voice); } });
+  ps.announce({ hello: false }); // initial join; peers reply with hello:1
   const want3d = true; /* 3D-only (silent 2D fallback without WebGL) */ const shotKey = nacl.sign.keyPair(); let shotSeq = 0;
+  const analog = !!GAMES[g]?.analog; // snake/tron: free steering — no on-screen ◀▲▼▶ pad
   const voiceCardHtml = `<div class="card"><div class="row gap"><label class="small"><input type="checkbox" id="arc-voice" style="width:auto" ${px.enabled ? 'checked' : ''}> 🎙 ${g === 'drawguess' ? 'Room voice' : 'Proximity voice'}</label>${g !== 'drawguess' ? `<label class="small"><input type="checkbox" id="arc-mutebots" style="width:auto" ${px.muteBots ? 'checked' : ''}> Mute bot chat</label>` : ''}</div>
       ${pttHTML('arc-ptt')}<p class="muted small" id="arc-vnote">${isMinor(me) ? 'Voice needs a parent to turn it on (👪). You only ever hear players your own age group.' : 'Off until you turn it on. Adults and under-18s are never connected.'}</p></div>`;
   v.innerHTML = `<div class="modes">${MASS_GAMES.map(([k, l]) => `<button data-game="${k}" class="${k === g ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div class="row gap small arc-veh">${g === 'tron' ? '<select id="arc-vehicle"><option value="bike">Light-cycle</option><option value="fighter">Star fighter</option></select>' : ''}${g === 'megaship' ? '<span class="muted">tap space to fire · shots recharge (max 10)</span>' : ''}</div>
     <div class="arc-stage"><canvas id="arc-cv" width="720" height="720" aria-label="${g} game"></canvas><canvas id="arc-3d-cv" class="arc-3d" hidden></canvas></div>
-    ${g === 'drawguess' ? `<div class="card"><div id="dg-word" class="small"></div><div class="dg-log" id="dg-log"></div><form id="dg-f" class="row gap"><input id="dg-in" maxlength="40" placeholder="Type your guess…" autocomplete="off"><button class="primary">Guess</button></form><p class="muted small">Chat is required for this game. Only players your age group are in this room. Tap a name to mute/block/report.</p></div>` : `<div class="row gap arc-pad">${['left', 'up', 'down', 'right'].map(d => `<button data-dir="${d}" aria-label="${d}">${{ left: '◀', up: '▲', down: '▼', right: '▶' }[d]}</button>`).join('')}</div>`}
+    ${g === 'drawguess' ? `<div class="card"><div id="dg-word" class="small"></div><div class="dg-log" id="dg-log"></div><form id="dg-f" class="row gap"><input id="dg-in" maxlength="40" placeholder="Type your guess…" autocomplete="off"><button class="primary">Guess</button></form><p class="muted small">Chat is required for this game. Only players your age group are in this room. Tap a name to mute/block/report.</p></div>` : analog ? '' : `<div class="row gap arc-pad">${['left', 'up', 'down', 'right'].map(d => `<button data-dir="${d}" aria-label="${d}">${{ left: '◀', up: '▲', down: '▼', right: '▶' }[d]}</button>`).join('')}</div>`}
     ${g === 'drawguess' ? '<div id="dg-pv"></div>' : voiceCardHtml}
     <div class="card"><h4>Sub-map <span id="arc-sub"></span></h4><div id="arc-subs" class="row gap"></div><div id="arc-players" class="arc-players"></div></div>`;
   const cv = v.querySelector('#arc-cv'), ctx = cv.getContext('2d'), c3 = v.querySelector('#arc-3d-cv');
   const send = d => { const W = L.where.get(myCode); const i = W?.input?.(myCode, d); if (i) mesh()?.arcade?.send({ g, op: 'in', dir: d, tick: i.tick }); };
   v.querySelectorAll('[data-dir]').forEach(b => b.onclick = () => send(b.dataset.dir));
-  const analog = !!GAMES[g]?.analog; document.onkeyup = null;
+  document.onkeyup = null;
   // FREE ANALOG STEERING (snake/tron): drag/hold a finger or the mouse = target heading (2D: from my head toward the pointer;
   // 3D: ray-cast onto the ground). Keyboard fallback: hold ←/→ (or A/D) to rotate at the max turn rate; ↑/↓ aim north/south.
   let lastAim = null, aimTick = -1, held = 0; const sendAim = a => { const W = L.where.get(myCode); if (a == null || !W) return; if (lastAim != null && Math.abs(Math.atan2(Math.sin(a - lastAim), Math.cos(a - lastAim))) < 0.035) return; if (aimTick === W.tick) return; aimTick = W.tick; lastAim = a; send({ a: +a.toFixed(4) }); };
