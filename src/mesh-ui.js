@@ -98,3 +98,33 @@ export function devSection() {
   return `<div class="card" data-mesh="dev"><h3>🕸️ Mesh</h3><p class="small">You: <b id="mycode">${m.code}</b> · transport: ${esc(m.transport)} · active list: ${m.member.active.size} · online now: ${m.online().length} · cached stubs: ${m.node.cache.size} · friends: ${m.node.friends.size} · blocked: ${m.node.blocked.size}</p>
     <p class="muted small">Test locally: open more tabs with <code>?as=seed-3</code>, <code>?as=seed-5</code>… (each tab = different demo user).</p><pre class="small muted">${esc(m.log.slice(0, 12).join('\n'))}</pre></div>`;
 }
+
+// v52 Quiet safety number sheet (diggable; no banner / no nag).
+export async function openSafetySheet(m, peer, peerName, render) {
+  document.getElementById('snsheet')?.remove();
+  const sn = await m.safetyFor?.(peer); const d = document.createElement('div'); d.id = 'snsheet'; d.className = 'modal'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', 'Safety number');
+  if (!sn) {
+    d.innerHTML = `<div class="card"><h3>Safety number</h3><p class="small muted">Available once their profile key is known on this phone.</p><button id="snclose">Close</button></div>`;
+    document.body.appendChild(d); d.querySelector('#snclose').onclick = () => d.remove(); d.onclick = e => { if (e.target === d) d.remove(); }; return;
+  }
+  const status = sn.verified ? `<span class="tag">Verified</span> <span class="muted small">· ${new Date(sn.verifiedAt).toLocaleDateString()}</span>` : `<span class="muted small">Not marked verified</span>`;
+  d.innerHTML = `<div class="card"><h3>Safety number</h3>
+    <p class="small">Compare with <b>${esc(peerName || peer)}</b> out-of-band. Both phones show the same number for the same pair.</p>
+    <p class="mono" id="snnum" style="letter-spacing:.04em;line-height:1.6;word-break:break-word;user-select:all">${esc(sn.number)}</p>
+    <p class="muted small">Your key hint: <code>${esc(sn.myHint || '—')}</code> · ${status}</p>
+    <canvas id="snqr" width="180" height="180" style="display:block;margin:8px auto;background:#fff;border-radius:8px"></canvas>
+    <div class="row gap" style="flex-wrap:wrap">
+      <button id="sncopy" class="primary">Copy</button>
+      ${sn.verified ? '<button id="snclear" class="ghost">Clear verified</button>' : '<button id="snmark" class="primary">Mark as verified</button>'}
+      <button id="snclose" class="ghost">Close</button>
+    </div>
+    <p id="snres" class="small muted"></p></div>`;
+  document.body.appendChild(d);
+  try { const { drawQr } = await import('./qr.js'); drawQr(d.querySelector('#snqr'), sn.qr, { scale: 3, margin: 2 }); } catch { d.querySelector('#snqr')?.remove(); }
+  const res = t => { const el = d.querySelector('#snres'); if (el) el.textContent = t; };
+  d.querySelector('#snclose').onclick = () => d.remove();
+  d.onclick = e => { if (e.target === d) d.remove(); };
+  d.querySelector('#sncopy').onclick = async () => { try { await navigator.clipboard.writeText(sn.number); res('Copied.'); } catch { res('Select the number to copy.'); } };
+  d.querySelector('#snmark') && (d.querySelector('#snmark').onclick = async () => { await m.markSafetyVerified(peer, sn.fp); res('Marked verified on this phone.'); d.remove(); render?.(); });
+  d.querySelector('#snclear') && (d.querySelector('#snclear').onclick = async () => { await m.clearSafetyVerified(peer); res('Cleared.'); d.remove(); render?.(); });
+}
