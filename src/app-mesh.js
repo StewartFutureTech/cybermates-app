@@ -60,7 +60,10 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   node.minor = DISC.isMinor(me); node.keyOf = c => binder.pinned(c); // v43: gossiped stubs must use the bound key // under 18: no dating requests in or out
   // E2E layer (src/e2e.js): every envelope signed; directed ones AES-GCM encrypted per chat (X25519). Then relay rotation
   // (src/relay.js): 2-3 onion hops when enough eligible relays, else direct over the current transport.
-  const e2e = new E2E({ code: id.code, keys: id.keys, box: id.box, binder, bindProof: bindClaim }), attested = new Set(), localT = !String(bus.kind).startsWith('supabase');
+  const e2e = new E2E({ code: id.code, keys: id.keys, box: id.box, prekeys: id.pre, binder, bindProof: bindClaim }), attested = new Set(), localT = !String(bus.kind).startsWith('supabase');
+  // v47 forward secrecy: rotating signed prekeys live in the encrypted vault; a rotation (new prekey, old secrets erased) is saved at once.
+  { let preQ = Promise.resolve(); const savePre = list => { preQ = preQ.then(() => v.use(p => { const r = p.meshIds?.[asKey]; if (r) r.pre = list; })).catch(() => {}); };
+    e2e.onPrekeys = savePre; if (JSON.stringify(id.pre || []) !== JSON.stringify(e2e.prekeyList())) savePre(e2e.prekeyList()); }
   let myAtt = false;
   // Boost refunds verified server-side (api/_fn/refund.js): register on send, recipient posts its signed receipt, sender claims
   // only after the timeout. Local dev bus: the node refunds locally (wallet) because there is no server.
