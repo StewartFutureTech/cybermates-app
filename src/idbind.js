@@ -39,12 +39,15 @@ function powHit(sw, i, n, b) { for (let j = 0; j < 8; j++) W[j] = sw[j]; W[8] = 
   HS.set(H0); compress(HS, W); if (b <= 32) return b === 0 || (HS[0] >>> (32 - b)) === 0; return HS[0] === 0 && (HS[1] >>> (64 - b)) === 0; }
 export const powSeed = ({ code, pub, iat, b, k }) => sha256Bytes(te.encode(`cm-idbind-v1|${code}|${pub}|${iat}|${b}|${k}`));
 // Solve k sub-puzzles. Yields to the event loop every `slice` hashes (UI never freezes); onProgress(done, k).
-export async function solvePow(params, { slice = 50000, onProgress = () => {}, yieldFn = () => new Promise(r => setTimeout(r, 0)), maxHashes = 2 ** 31 } = {}) {
-  const { b, k } = params, sw = seedWords(powSeed(params)), n = []; let hashes = 0;
+export const solvePow = (params, o) => solvePowSeed(powSeed(params), params, o);
+// v46: same puzzle over any 32-byte seed (src/mesh-admit.js uses its own domain string; the server verifies it in SQL)
+export async function solvePowSeed(seed, { b, k }, { slice = 50000, onProgress = () => {}, yieldFn = () => new Promise(r => setTimeout(r, 0)), maxHashes = 2 ** 31 } = {}) {
+  const sw = seedWords(seed), n = []; let hashes = 0;
   for (let i = 0; i < k; i++) { let x = 0; for (;;) { if (powHit(sw, i, x, b)) break; x = (x + 1) >>> 0; if (++hashes % slice === 0) { if (hashes > maxHashes) throw new Error('pow: gave up'); await yieldFn(); } } n.push(x); onProgress(i + 1, k); }
   return { n, hashes };
 }
-export function verifyPow(params, n) { if (!Array.isArray(n) || n.length !== params.k) return false; const sw = seedWords(powSeed(params));
+export const verifyPow = (params, n) => verifyPowSeed(powSeed(params), params, n);
+export function verifyPowSeed(seed, params, n) { if (!Array.isArray(n) || n.length !== params.k) return false; const sw = seedWords(seed);
   for (let i = 0; i < n.length; i++) { const x = n[i]; if (!Number.isInteger(x) || x < 0 || x > 0xffffffff || !powHit(sw, i, x >>> 0, params.b)) return false; } return true; }
 export const powWork = p => p.k * 2 ** p.b; // expected hashes
 const meets = (pw, min) => pw && Number.isInteger(pw.b) && Number.isInteger(pw.k) && pw.b <= POW_MAX.b && pw.k <= POW_MAX.k && pw.b >= 0 && pw.k >= 1 && powWork(pw) >= powWork(min) && pw.b >= Math.min(min.b, 12);

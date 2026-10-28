@@ -50,7 +50,7 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
     await v.use(p => { if (p.meshIds?.[asKey]) p.meshIds[asKey].bindClaim = bindClaim; }); (globalThis.__cmBindTiming ||= []).push(ms); }
   const bindEnv = (typeof import.meta !== 'undefined' && import.meta.env) || {}, bindPub = bindEnv.VITE_ID_BIND_PUBKEY || null;
   const binder = new IdBinder({ serverPub: bindPub }); binder.trust(id.code, id.keys.pub); for (const [c, f] of Object.entries(id.friends || {})) if (f?.pub) binder.trust(c, f.pub); // friends were pinned before v43
-  onStatus('OPENING TRANSPORT'); bus ||= await createBus(); onStatus('TRANSPORT ' + String(bus.kind).toUpperCase());
+  onStatus('OPENING TRANSPORT'); bus ||= await createBus(undefined, { identity: { code: id.code, pub: id.keys.pub }, onGate: g => onStatus(g.state === 'joined' ? 'MESH JOINED' : g.state === 'refused' ? 'MESH GATE · ' + String(g.reason || 'REFUSED').toUpperCase() : 'MESH ' + String(g.state).toUpperCase()) }); // v46 join gate onStatus('TRANSPORT ' + String(bus.kind).toUpperCase());
   const pub = DISC.publishProfile(me, stripSensitive({ ...Object.fromEntries(PUBLIC_FIELDS.map(k => [k, me[k]]).filter(([, x]) => x !== undefined)), mp: matchPacket(me) })); // minors: no dating vectors
   const rv = new BusRendezvous(); let timer = null, verifying = false; const log = [];
   const changed = (...e) => { log.unshift(new Date().toLocaleTimeString() + ' ' + e.join(' ')); log.length = Math.min(log.length, 20); clearTimeout(timer); timer = setTimeout(onChange, 50); };
