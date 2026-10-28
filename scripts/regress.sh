@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# v48: smoke-supafs (forward secrecy + multi-device for the server-relayed Supabase chat path: signed uid-bound device bundles,
+#      pins, per-message ephemeral + per-device wrapped key, prekey rotation/erase + seized-phone, v1 compat, SupabaseStore vs a
+#      DB-rule fake, vault wiring; live DB half = supabase/tests/e2e_devices.sql, rolls back) + e2e-supafs (5 real tabs; LIVE
+#      sign-in/Realtime part needs SUPA_TEST_USERS, else SKIP).
 # v47: smoke-e2efs (E2E hardening: PAKE device transfer (CPace X25519 / Elligator2) + forward-secret v2 mesh envelopes with rotating
 #      signed prekeys, erase-after-grace, seized-phone test, old-client compat) + e2e-e2efs (2 real tabs: v2-only chat, prekeys
 #      restored from the vault after reload, real Settings-UI transfer wrong/right code).
@@ -37,7 +41,7 @@ set -u; cd "$(dirname "$0")/.."; fail=0; out=${SHOTS:-/workspace/cybermates-shot
 run(){ n=$1; shift; if "$@" > "$out/$n.log" 2>&1; then echo "PASS $n"; else echo "FAIL $n (see $out/$n.log)"; fail=1; fi; }
 run build npm run build:all
 run smoke node --no-warnings scripts/smoke.mjs
-for s in flink shop party arcade analog pick shades itema pmenu sfx arcade-ai match megaship battleship partb calls supaday brawl imports bootfail hostrot hostrot2 hostrot3 ux ui v35 supa-adapter supa-live signin perf glow matchprefs linking-ui rxwire reviewq globalrl refunds brawlnet idbind proxvoice csam rtgate e2efs; do [ -f scripts/smoke-$s.mjs ] && run smoke-$s node --no-warnings scripts/smoke-$s.mjs; done
+for s in flink shop party arcade analog pick shades itema pmenu sfx arcade-ai match megaship battleship partb calls supaday brawl imports bootfail hostrot hostrot2 hostrot3 ux ui v35 supa-adapter supa-live signin perf glow matchprefs linking-ui rxwire reviewq globalrl refunds brawlnet idbind proxvoice csam rtgate e2efs supafs; do [ -f scripts/smoke-$s.mjs ] && run smoke-$s node --no-warnings scripts/smoke-$s.mjs; done
 run shots-ack node --no-warnings scripts/shots-ack.mjs                # UX §2/§3 (v32): real 30 s ack timer + countdown at 320-430 px, forced profile, starter characters, rolling photos
 run shots-match node --no-warnings scripts/shots-match.mjs            # UX §5 (v33): per-mode ranges/min %/compare, deal breakers, dating-only fields, Dating-only gender filter, minors, 320-430 px
 run shots-discover node --no-warnings scripts/shots-discover.mjs      # UX §6 (v35): list/swipe, pass refills slot, like, tap loads profile, 320/390/430 px
@@ -52,5 +56,6 @@ run e2e-proxvoice node scripts/e2e-proxvoice.mjs                        # v44 pr
 run e2e-csam node scripts/e2e-csam.mjs                                  # v45 CSAM evidence preservation, 2 real tabs + moderator panel
 run e2e-rtgate node scripts/e2e-rtgate.mjs                              # v46 Realtime join gate, LIVE Realtime (anon refused; signed-in part needs SUPA_TEST_USERS)
 run e2e-e2efs node scripts/e2e-e2efs.mjs                              # v47 forward secrecy + PAKE transfer, 2 real tabs
+run e2e-supafs node scripts/e2e-supafs.mjs                            # v48 FS + multi-device on the Supabase chat path, 5 real tabs (live part needs SUPA_TEST_USERS)
 [ -x "${JAVA_HOME:-/home/box/jdk17}/bin/java" ] && run android bash scripts/android-check.sh
 [ $fail = 0 ] && echo "REGRESSION: ALL PASS" || echo "REGRESSION: FAILURES"; exit $fail

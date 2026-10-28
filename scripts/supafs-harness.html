@@ -1,0 +1,29 @@
+<!doctype html><meta charset=utf-8><title>supafs harness (v48)</title><pre id="log"></pre>
+<script type="module">
+// v48 test harness (vite dev only, not part of the app build): one "device" per tab. Device keys / prekeys / pins live in a
+// tiny per-device vault over localStorage (the app uses the encrypted vault, src/supa-device.js is the same code path).
+import { isV2 } from '/src/backend/supabase-e2e.js';
+import { SupabaseStore } from '/src/backend/supabase-store.js';
+import { SupabaseRealtime } from '/src/backend/supabase-realtime.js';
+import { deviceSealer } from '/src/supa-device.js';
+import { makeClient } from '/src/backend/supabase-client.js';
+const dev = new URLSearchParams(location.search).get('dev') || 'x', K = 'supafs-test-vault:' + dev;
+const vault = { use: async fn => { const o = JSON.parse(localStorage.getItem(K) || '{}'); const r = await fn(o); localStorage.setItem(K, JSON.stringify(o)); return r; } };
+const H = window.H = { skew: 0, got: [], isV2,
+  async init() { this.sealer = await deviceSealer(vault, { now: () => Date.now() + this.skew }); await this.sealer.flush(); return { deviceId: this.sealer.deviceId, pre: this.sealer.currentPrekeyId(), stored: JSON.parse(localStorage.getItem(K)).supaDevice.pre.length }; },
+  bundle(uid) { return this.sealer.bundle(uid); },
+  verify(uid, row) { return this.sealer.verifyDevice(uid, row); },
+  seal(a) { return this.sealer.seal2(a); },
+  open(a) { try { return { text: this.sealer.open2(a) }; } catch (e) { return { err: e.code || e.message }; } },
+  rotate() { return this.sealer.rotate().id; },
+  async signIn(email, password) { this.c = await makeClient({ persist: false }); const r = await this.c.auth.signInWithPassword({ email, password }); if (r.error) throw new Error(r.error.message);
+    this.uid = r.data.user.id; this.store = new SupabaseStore(this.c, { sealer: this.sealer }); this.rt = new SupabaseRealtime(this.c); return this.uid; },
+  async listen() { this.off = await this.rt.subscribeMessages(async row => { this.got.push(await this.store.openRow(row)); }, () => {}, { ownSent: true }); },
+  async send(to, text) { const r = await this.store.sendMessage(this.uid, to, text); return { ok: r.ok, fs: r.msg?.fs, id: r.msg?.id, reason: r.reason, error: r.error }; },
+  async list() { return (await this.store.listMessages(null)).map(m => ({ id: m.id, text: m.text, fs: m.fs, why: m.why, from: m.from })); },
+  async raw(id) { const { data } = await this.c.from('messages').select('body,nonce').eq('id', id).maybeSingle(); return data; },
+  async devices(uid) { return (await this.c.from('e2e_devices').select('*').eq('user_id', uid)).data || []; },
+  async signOut() { try { this.off?.(); } catch {} try { await this.c.auth.signOut(); } catch {} },
+};
+window.ready = true;
+</script>
