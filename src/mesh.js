@@ -103,6 +103,10 @@ export class MeshNode {
       let refunded = false; if (boost) { const c = this.refunds ? await this.refunds.claim({ msgId: id, from: this.code, to }).catch(() => ({ ok: false })) : { ok: (await this.wallet?.refund?.({ boost: true })) !== false }; refunded = !!c.ok; if (msg) msg.refunded = refunded; }
       this.onEvent('undelivered', to, { id, message: LOGGED_OFF_MSG, refunded }); }, ms); t?.unref?.(); }
   on_chat(from, m, env) { if (!this.friends.has(from)) return; if (env?.id) this.send(from, 'rcpt', { ref: env.id, sig: signRcpt(env.id, from, this.code, this.keys.sec), pub: this.keys.pub }); if (env?.id && this.chats.get(from)?.msgs.some(x => x.rid === env.id)) return; m = { ...m, rid: env?.id }; this.chat(from).msgs.push({ ...m, from }); this.keep(from, { ...m, from }); this.onEvent('chat', from); }
+  // v49: a chat I sent from ANOTHER of my linked devices (its v3 'sent copy'): shown in the conversation as mine; the friend's signed
+  // receipt (delivered to all my devices) then marks it delivered here too. Same id as the original, so it is never added twice.
+  sentCopy(to, m, id) { if (!id || !m || typeof m !== 'object' || !this.friends.has(to) || this.blocked.has(to)) return false; const ch = this.chat(to); if (ch.msgs.some(x => x.id === id)) return false;
+    const local = { from: this.code, text: typeof m.text === 'string' ? m.text : '', attachment: m.attachment, at: Number.isFinite(m.at) ? m.at : this.now(), burn: m.burn || 0, id, state: 'sent', copy: true }; ch.msgs.push(local); this.keep(to, local); this.onEvent('chat-copy', to); return true; }
   // 7-day safety copy (kept inside the encrypted vault, wiped by the sweep) so 'Hide instantly' chats can still be reported
   keep(peer, m) { Promise.resolve(this.safety?.add(peer, { from: m.from, text: m.text, at: m.at || this.now() })).catch(() => {}); }
   // retention choice: each side says what it wants; effective() applies only when both agree (minors: always kept)

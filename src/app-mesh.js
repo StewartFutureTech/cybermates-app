@@ -29,6 +29,7 @@ import { matchPacket } from './match-v2.js';
 import { LiveNode, powerLevel, decodeVec } from './livemesh.js'; // UX §6-8 living mesh: bucket, soft-tag presence, tentacles, search, tap-to-open // UX §5 compact match packet (visible answers only)
 import { RxGate } from './shield.js'; // v38: DoS cheap shield on the live receive path
 import { BDiscWire } from './bdisc.js';
+import { buildSync, mergeSync } from './devsync.js'; // v49: friends + block decisions synced to my own linked devices (dsync)
 import { IdBinder, makeClaim, verifyClaim, verifyCert } from './idbind.js'; // v43: ID <-> signing-key binding (proof of work join cost / server certs) // v38: broadcast discovery (anonymous soft-tag search) on the live receive path
 export const PUBLIC_FIELDS = ['name', 'age', 'gender', 'city', 'countryCode', 'bio', 'games', 'lookingFor', 'interests', 'avatarHue', 'thumb', 'test'];
 class BusRendezvous { constructor() { this.known = new Map(); } seen(c) { this.known.set(c, Date.now()); } seeds(shard, ex) { return [...this.known].filter(([c, t]) => c !== ex && Date.now() - t < 10 * 60e3).slice(-3).map(([c]) => c); } register() {} checkIn() {} }
@@ -60,7 +61,8 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   node.minor = DISC.isMinor(me); node.keyOf = c => binder.pinned(c); // v43: gossiped stubs must use the bound key // under 18: no dating requests in or out
   // E2E layer (src/e2e.js): every envelope signed; directed ones AES-GCM encrypted per chat (X25519). Then relay rotation
   // (src/relay.js): 2-3 onion hops when enough eligible relays, else direct over the current transport.
-  const e2e = new E2E({ code: id.code, keys: id.keys, box: id.box, prekeys: id.pre, binder, bindProof: bindClaim }), attested = new Set(), localT = !String(bus.kind).startsWith('supabase');
+  let syncSoon = () => {}; const onSibling = x => syncSoon(x); // v49: set below (dsync to my sibling devices)
+  const e2e = new E2E({ code: id.code, keys: id.keys, box: id.box, prekeys: id.pre, onSibling, binder, bindProof: bindClaim }), attested = new Set(), localT = !String(bus.kind).startsWith('supabase');
   // v47 forward secrecy: rotating signed prekeys live in the encrypted vault; a rotation (new prekey, old secrets erased) is saved at once.
   { let preQ = Promise.resolve(); const savePre = list => { preQ = preQ.then(() => v.use(p => { const r = p.meshIds?.[asKey]; if (r) r.pre = list; })).catch(() => {}); };
     e2e.onPrekeys = savePre; if (JSON.stringify(id.pre || []) !== JSON.stringify(e2e.prekeyList())) savePre(e2e.prekeyList()); }
@@ -74,7 +76,10 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   function outbound(env) {
     if (env.type === 'ping') env = { ...env, body: { ...env.body, relay: router.active, att: myAtt } };
     if (env.to === '*') { try { bus.post({ k: 'mesh', env: e2e.sealBroadcast(env) }); } catch (e) { changed('send refused', e.code || e.message); } return; }
-    e2e.seal(env).then(sealed => { const r = router.route(sealed, env.id); bus.post(r.pkt); if (r.via) changed('relay path', r.via.length, 'hops'); }).catch(e => changed('send refused', e.code || e.message));
+    // v49: one envelope per needed device set (v3 for v49 devices of the recipient + my own linked devices, v2/v1 for older devices)
+    if (env.to === id.code) { e2e.sealAll(env).then(list => { for (const sealed of list) bus.post({ k: 'mesh', env: sealed }); }).catch(e => changed('send refused', e.code || e.message)); return; } // dsync: my own devices only
+    if (e2e.wantsPing(env.to, env.type)) node.ping(); // v49: a pre-v49 phone opens only the device that pinged it last
+    e2e.sealAll(env).then(list => { for (const sealed of list) { const r = router.route(sealed, env.id); bus.post(r.pkt); if (r.via) changed('relay path', r.via.length, 'hops'); } }).catch(e => changed('send refused', e.code || e.message));
   }
   const passedSet = new Set(); // swiped-left nodes (this session)
   // v38: legacy 'disc' (query carrying the sender ID, answered with the FULL signed profile) is retired: discovery is now
@@ -84,6 +89,7 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   node['on_disc-ans'] = (from, b) => { if (passedSet.has(from)) return; if (b?.mode === node.discMode && DISC.acceptVector(me, b.mode, b.sp?.profile)) { node._live(from, b.sp, b.pub); changed(); } };
   let inq = Promise.resolve(); // inbound envelopes are opened IN ARRIVAL ORDER (async AES must not reorder e.g. a late answer after 'bye')
   const inbound = env => (inq = inq.then(() => e2e.open(env)).then(o => { if (!o) return;
+    if (o.from === id.code) { if (o.copy) onCopy(o); return; } // v49: my own linked devices (sibling ping learned in e2e; sent copy / dsync)
     if (o.type === 'ping') { router.noteRelayer(o.from, !!o.body?.relay); if (o.body?.att) attested.add(o.from); else attested.delete(o.from);
       if (node.discMode && o.body?.sp && !DISC.acceptVector(me, node.discMode, o.body.sp.profile)) o = { ...o, body: { ...o.body, sp: null } }; } // mode filter: only this mode's vectors
     node.receive(o); changed(); }).catch(() => {}));
@@ -100,9 +106,9 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   // game / stranger / anonymous budgets, all BEFORE unpack, signature verify (e2e.open) or decrypt. Packets for other
   // phones on the shared channel are ignored first, so they never count against anyone.
   let liveRef = null, bdw = null;
-  const rxGate = new RxGate({ isKnown: c => node.friends.has(c) || e2e.peers.has(c) || node.presence.has(c) || !!liveRef?.bucket.has(c), onStrike: s => changed('shield: flood dropped from', s.code, '(' + s.count + ')') });
+  const rxGate = new RxGate({ isKnown: c => c === id.code || node.friends.has(c) || e2e.peers.has(c) || node.presence.has(c) || !!liveRef?.bucket.has(c), onStrike: s => changed('shield: flood dropped from', s.code, '(' + s.count + ')') });
   const rxMeta = m => { if (!m || typeof m !== 'object') return { sender: null };
-    if (m.k === 'mesh') { const e = m.env; if (!e || e.from === id.code || (e.to !== id.code && e.to !== '*')) return null; return { sender: e.from, game: e.to === '*' && e.type === 'arc' }; }
+    if (m.k === 'mesh') { const e = m.env; if (!e) return null; if (e.from === id.code) return (e.to === '*' ? e.type === 'ping' : Array.isArray(e.md)) ? { sender: id.code } : null; if (e.to !== id.code && e.to !== '*') return null; /* v49: my linked devices' pings + v3 copies pass above */ return { sender: e.from, game: e.to === '*' && e.type === 'arc' }; }
     if (m.k === 'mem') return m.to === id.code ? { sender: null } : null;
     if (m.k === 'onion') return m.hop === id.code ? { sender: null } : null;
     if (m.k === 'hello') return m.code === id.code ? null : { sender: m.code };
@@ -120,6 +126,7 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
     if (msg.k === 'hello') { rv.seen(msg.code); if (msg.code !== id.code && !msg.ack) bus.post({ k: 'hello', code: id.code, ack: true }); return; }
     if (msg.k === 'mem' && msg.to === id.code) { if (msg.z) { unpack(msg.z).then(m => { member.receive(m); changed('membership', m.t); }).catch(() => {}); return; } member.receive(msg.m); return changed('membership', msg.m.t); }
     if (msg.k === 'onion') { const r = router.onPacket(msg); if (r?.undeliverable != null) { node.on_undeliv(null, { ref: r.undeliverable }); return changed('returned undeliverable', r.undeliverable); } if (r) setTimeout(() => { try { bus.post(r.pkt); } catch {} }, r.delay); return; } // relay hop (only while online + searching)
+    if (msg.k === 'mesh' && msg.env.from === id.code) { inbound(msg.env); return; } // v49: sibling device (rxMeta let only pings / v3 through)
     if (msg.k === 'mesh' && (msg.env.to === id.code || msg.env.to === '*') && msg.env.from !== id.code) { rv.seen(msg.env.from); inbound(msg.env); }
   });
   // store-and-forward on THIS phone only: pending items live inside the encrypted vault (device key), 7-day window
@@ -168,7 +175,18 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   const voiceSignal = { send: (to, m) => node.send(to, 'vrtc', m), on: fn => { vrtcSubs.add(fn); return () => vrtcSubs.delete(fn); } };
   const arcade = { voiceSignal, send: b => node.send('*', 'arc', b), listen: fn => { arcH = fn; }, sub: fn => { arcSubs.add(fn); return () => arcSubs.delete(fn); } }; // sub(): extra listeners (host rotation / join-anytime in match-ui)
   const killLinks = reason => { for (const L of links.values()) try { L.kill(reason); } catch {} links.clear(); };
-  const save = () => v.use(p => { const x = p.meshIds[asKey]; x.friends = node.persistable().friends; x.blocked = [...node.blocked]; });
+  // v49 LINKED-DEVICE SYNC (src/devsync.js): friends (union) + block/unblock (last writer wins) go to my own sibling devices only.
+  const blockLog = id.blockLog && typeof id.blockLog === 'object' ? { ...id.blockLog } : {}; let syncT = null; const devSync = { sent: 0, got: 0, applied: 0 };
+  const save = () => v.use(p => { const x = p.meshIds[asKey]; x.friends = node.persistable().friends; x.blocked = [...node.blocked]; x.blockLog = { ...blockLog }; }).then(r => { syncSoon(); return r; });
+  syncSoon = () => { if (!e2e.siblings().length) return; clearTimeout(syncT); syncT = setTimeout(() => { if (!cur || !e2e.siblings().length) return; devSync.sent++; node.send(id.code, 'dsync', buildSync({ friends: node.friends, blockLog })); }, 600); };
+  function onCopy(o) {
+    if (o.type === 'dsync' && o.to === id.code) { devSync.got++; const r = mergeSync(o.body, { friends: node.friends, blockLog, isBanned: c => bl.isBanned(c), isBlocked: c => blocks.isBlocked(c) || node.blocked.has(c), pinned: c => binder.pinned(c) });
+      if (!r.changed) return; Object.assign(blockLog, r.log);
+      (async () => { for (const c of r.block) { links.get(c)?.kill('blocked'); links.delete(c); node.block(c); await blocks.add(c); }
+        for (const c of r.unblock) { node.unblock(c); await blocks.remove(c); }
+        for (const [c, pub] of r.addFriends) { if (!binder.pinned(c)) binder.trust(c, pub); node.friends.set(c, { pub, stub: null }); node.pendingIn.delete(c); node.pendingOut.delete(c); node.boosted?.delete(c); }
+        devSync.applied++; await save(); changed('linked device sync', r.addFriends.length, 'friends,', r.block.length + r.unblock.length, 'block changes'); })().catch(() => {}); return; }
+    if (o.type === 'chat' && o.to !== id.code) { if (node.sentCopy(o.to, o.body, o.id)) changed('sent copy', o.to); } }
   onStatus('BROADCASTING HELLO'); bus.post({ k: 'hello', code: id.code }); await new Promise(r => setTimeout(r, 300));
   // SINGLE ENTRY (api/_fn/bootstrap.js): the server super list is the ONLY way in. Halt / ban / US-only gate there. No cached-list
   // jump-start, no owner/master phone, no seed list, no phone snapshots. Server unreachable => no new entry.
@@ -203,14 +221,15 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
     // close any direct link, and re-run discovery so the mesh fills the slot with another node.
     passed: passedSet, live, openProfile: c => live.openProfile(c), like: c => live.like(c), search: (crit, cb) => live.search(crit, cb), bucket: () => [...live.bucket.entries()].map(([c, e]) => ({ code: c, score: e.score, tags: e.sp.profile })).sort((a, b) => b.score - a.score),
     pass(c) { if (!c) return; passedSet.add(c); live.pass(c); try { links.get(c)?.kill('passed'); } catch {} links.delete(c); node.discAt = 0; changed('passed', c); },
-    async block(c) { links.get(c)?.kill('blocked'); links.delete(c); node.block(c); await blocks.add(c); await save(); changed('blocked', c); },
-    async unblock(c) { node.unblock(c); await blocks.remove(c); await save(); changed(); },
+    async block(c) { links.get(c)?.kill('blocked'); links.delete(c); node.block(c); await blocks.add(c); blockLog[c] = [1, Date.now()]; await save(); changed('blocked', c); },
+    async unblock(c) { node.unblock(c); await blocks.remove(c); blockLog[c] = [0, Date.now()]; await save(); changed(); },
+    devices: () => ({ me: e2e.box.xpub.slice(0, 16), siblings: e2e.siblings().map(d => ({ id: d.xpub.slice(0, 16), md: d.md, fs: !!d.pre, seen: d.seen })), of: c => e2e.devicesOf(c), sync: { ...devSync } }), // v49 (read-only)
     async requestFriend(c, opts = {}) { if (member.active.has(member.key(member.shards[0], c)) && !(await member.ensureVerified([c])).length) { changed('unverified row dropped', c); return { ok: false, reason: 'unverified' }; } const p = node.requestFriend(c, opts); changed('friend request', c); const r = await p; changed(); return r; },
     decline(c) { node.declineFriend(c); changed('declined', c); },
     parent: new ParentControls({ store: { read: async () => (await v.read())?.parental || null, write: x => v.use(p => { p.parental = x; }) } }),
     callGate: (c, video) => canCall({ friend: node.friends.has(c), linkUp: !!links.get(c)?.up, blocked: blocks.isBlocked(c), banned: bl.isBanned(c), halted: false, video, parent: DISC.isMinor(me) ? cur?.parent : null }),
     async accept(c) { node.acceptFriend(c); setTimeout(save, 500); changed('accepted', c); },
-    save, ONLINE_MS, e2e, binder, bindClaim, router, roulette, arcade, shield: rxGate, bdisc: bdw,
+    save, syncDevices: () => syncSoon(), ONLINE_MS, e2e, binder, bindClaim, router, roulette, arcade, shield: rxGate, bdisc: bdw,
     setDiscovery(mode, searching) { const online = globalThis.document?.visibilityState !== 'hidden'; router.active = !!searching && online; // relay duty only while online + searching
       const m = mode && DISC.canQuery(me, mode) ? mode : null; if (m !== node.discMode || (m && Date.now() - (node.discAt || 0) > 60e3)) { node.discMode = m; node.discAt = Date.now(); if (m) live.setMode(m); if (m) bdw?.search(m); } }, // v38: anonymous broadcast discovery (was the legacy ID-carrying 'disc')
     setRetention: (c, o) => node.setRetention(c, o), safetyConversation: c => node.safety.conversation(c),
