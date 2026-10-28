@@ -124,6 +124,11 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   { const { SafetyCopies } = await import('./retention.js'); const saved = (await v.read().catch(() => ({})))?.meshIds?.[asKey]?.safety || [];
     node.safety = new SafetyCopies({ seal: async x => x, open: async x => x, store: new Map(saved) }); const add0 = node.safety.add.bind(node.safety);
     node.safety.persist = () => v.use(p => { if (p.meshIds?.[asKey]) p.meshIds[asKey].safety = [...node.safety.store]; }); node.safety.add = async (...a) => { await add0(...a); await node.safety.persist(); }; }
+  // v45: sealed-evidence queue for child-safety reports lives in the same encrypted vault (NOT swept with the 7-day safety copy)
+  { const evLoad = async () => (await v.read().catch(() => ({})))?.meshIds?.[asKey]?.evidencePending || [], refs = l => l.map(x => x.ref).join();
+    // write, then read back (vault use() is read-modify-write; a concurrent save elsewhere could drop this change)
+    const evSave = async l => { for (let i = 0; i < 4; i++) { await v.use(p => { if (p.meshIds?.[asKey]) p.meshIds[asKey].evidencePending = l; }); if (refs(await evLoad()) === refs(l)) return; await new Promise(r => setTimeout(r, 150 * (i + 1))); } };
+    import('./evidence.js').then(E => E.setEvidencePersistence({ load: evLoad, save: evSave })).catch(() => {}); }
   node.recent = new Set(); member.mood = getMood();
   const cap = new ConnCap({ pinned: c => node.friends.has(c) || links.has(c) });
   // LIVING MESH (src/livemesh.js) rides E2E 'lm' envelopes (receiver-gated in LiveNode: band, block, ban, signature, rate).
@@ -220,3 +225,4 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
 }
 globalThis.__cmMesh = mesh; // test hook (read-only access for E2E)
 if (import.meta.env?.MODE === 'admin' || import.meta.env?.DEV) globalThis.__cmVoiceLab = () => import('./voice-lab.js'); // v44 proximity-voice e2e hook (admin/dev builds only)
+if (import.meta.env?.MODE === 'admin' || import.meta.env?.DEV) globalThis.__cmEvidence = () => import('./evidence-lab.js'); // v45 CSAM-evidence e2e hook (admin/dev builds only)

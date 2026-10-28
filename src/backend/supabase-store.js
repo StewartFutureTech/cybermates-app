@@ -9,7 +9,8 @@ export const ADAPTER_METHODS = [
   'listPhotos', 'uploadPhoto', 'deletePhoto', 'photoUrl',
   'sendFriendRequest', 'respondFriendRequest', 'listFriendRequests', 'listFriends', 'unfriend',
   'getOrCreateConversation', 'listConversations', 'listMessages', 'sendMessage', 'markDelivered', 'markRead', 'boostBalance',
-  'report', 'escalateReport', 'listMyReports', 'amModerator', 'modQueue', 'modClaim', 'modResolve', 'modActions', 'block', 'unblock', 'listBlocks', 'mute', 'unmute',
+  'report', 'escalateReport', 'listMyReports', 'amModerator', 'modQueue', 'modClaim', 'modResolve', 'modActions',
+  'evidencePubkey', 'evidenceBegin', 'evidencePut', 'modEvidenceList', 'modEvidenceGet', 'modEvidenceServerCopies', 'modPreserve', 'modCybertipPacket', 'modCybertipRecorded', 'block', 'unblock', 'listBlocks', 'mute', 'unmute',
   'listLfg', 'postLfg', 'deleteLfg', 'listEvents', 'createEvent', 'joinEvent', 'leaveEvent',
   'getParentControls', 'setParentControls', 'clearParentControls', 'joinRoulette', 'leaveRoulette', 'deleteAccount',
 ];
@@ -95,6 +96,17 @@ export class SupabaseStore {
   async modClaim(id) { return unwrap(await this.c.rpc('mod_claim', { p_report: id })); }
   async modResolve(id, status, note = null) { return unwrap(await this.c.rpc('mod_resolve', { p_report: id, p_status: status, p_note: note ?? null })); }
   async modActions(reportId) { return unwrap(await this.from('report_actions').select('id,report_id,moderator_id,action,from_status,to_status,note,at').eq('report_id', reportId).order('at')) || []; }
+  // ---- v45 CSAM evidence holds (migration 20261027000011). Reporter: upload sealed parts for their OWN child-safety report.
+  // Moderators: list / open (every access logged server-side) / 2703(f) preservation / CyberTip packet (sends nothing) / record tip id.
+  async evidencePubkey() { const r = unwrap(await this.c.rpc('evidence_pubkey')); const k = Array.isArray(r) ? r[0] : r; return k?.kid && k?.pub ? { kid: k.kid, pub: k.pub } : null; }
+  async evidenceBegin(reportId, env) { return unwrap(await this.c.rpc('evidence_begin', { p_report: reportId, p_env: env })); }
+  async evidencePut(holdId, idx, c, sha256) { return unwrap(await this.c.rpc('evidence_put', { p_hold: holdId, p_idx: idx, p_c: c, p_sha256: sha256 })); }
+  async modEvidenceList(reportId = null) { return unwrap(await this.c.rpc('mod_evidence_list', { p_report: reportId })) || []; }
+  async modEvidenceGet(holdId, idx) { return unwrap(await this.c.rpc('mod_evidence_get', { p_hold: holdId, p_idx: idx })); }
+  async modEvidenceServerCopies(holdId) { return unwrap(await this.c.rpc('mod_evidence_server_copies', { p_hold: holdId })) || []; }
+  async modPreserve({ reportId = null, holdId = null, ref, agency = null, days = 90 }) { return unwrap(await this.c.rpc('mod_preserve', { p_report: reportId, p_hold: holdId, p_ref: ref, p_agency: agency, p_days: days })); }
+  async modCybertipPacket(holdId) { return unwrap(await this.c.rpc('mod_cybertip_packet', { p_hold: holdId })); }
+  async modCybertipRecorded(holdId, tipId) { return unwrap(await this.c.rpc('mod_cybertip_recorded', { p_hold: holdId, p_tip_id: tipId })); }
   async block(other) { const me = await this.uid(); unwrap(await this.from('blocks').upsert({ blocker_id: me, blocked_id: other }, { onConflict: 'blocker_id,blocked_id', ignoreDuplicates: true })); return true; }
   async unblock(other) { const me = await this.uid(); unwrap(await this.from('blocks').delete().eq('blocker_id', me).eq('blocked_id', other)); return true; }
   async listBlocks() { return unwrap(await this.from('blocks').select('blocked_id')).map(r => r.blocked_id); }
