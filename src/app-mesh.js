@@ -136,6 +136,7 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   { const { SafetyCopies } = await import('./retention.js'); const saved = (await v.read().catch(() => ({})))?.meshIds?.[asKey]?.safety || [];
     node.safety = new SafetyCopies({ seal: async x => x, open: async x => x, store: new Map(saved) }); const add0 = node.safety.add.bind(node.safety);
     node.safety.persist = () => v.use(p => { if (p.meshIds?.[asKey]) p.meshIds[asKey].safety = [...node.safety.store]; }); node.safety.add = async (...a) => { await add0(...a); await node.safety.persist(); }; }
+  let safetyVerified = (await v.read().catch(() => ({})))?.meshIds?.[asKey]?.safetyVerified || {};
   { const savedChats = (await v.read().catch(() => ({})))?.meshIds?.[asKey]?.chats || {};
     try { node.loadChats(savedChats); } catch {} // v51: restore retention-scoped visible history
     const persistChatsSoon = () => v.use(p => { if (p.meshIds?.[asKey]) p.meshIds[asKey].chats = node.persistChats(); }).catch(() => {});
@@ -183,7 +184,7 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   const killLinks = reason => { for (const L of links.values()) try { L.kill(reason); } catch {} links.clear(); };
   // v49 LINKED-DEVICE SYNC (src/devsync.js): friends (union) + block/unblock (last writer wins) go to my own sibling devices only.
   const blockLog = id.blockLog && typeof id.blockLog === 'object' ? { ...id.blockLog } : {}; let syncT = null; const devSync = { sent: 0, got: 0, applied: 0 };
-  const save = () => v.use(p => { const x = p.meshIds[asKey]; x.friends = node.persistable().friends; x.blocked = [...node.blocked]; x.blockLog = { ...blockLog }; x.chats = node.persistChats(); }).then(r => { syncSoon(); return r; });
+  const save = () => v.use(p => { const x = p.meshIds[asKey]; x.friends = node.persistable().friends; x.blocked = [...node.blocked]; x.blockLog = { ...blockLog }; x.chats = node.persistChats(); x.safetyVerified = { ...safetyVerified }; }).then(r => { syncSoon(); return r; });
   syncSoon = () => { if (!e2e.siblings().length) return; clearTimeout(syncT); syncT = setTimeout(() => { if (!cur || !e2e.siblings().length) return; devSync.sent++; node.send(id.code, 'dsync', buildSync({ friends: node.friends, blockLog })); }, 600); };
   function onCopy(o) {
     if (o.type === 'dsync' && o.to === id.code) { devSync.got++; const r = mergeSync(o.body, { friends: node.friends, blockLog, isBanned: c => bl.isBanned(c), isBlocked: c => blocks.isBlocked(c) || node.blocked.has(c), pinned: c => binder.pinned(c) });
@@ -242,6 +243,14 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
     // v51 soft→hard Discover candidates: full profiles that cleared soft (both mins) AND local hard check
     hardReady: () => [...(live.fullCache || [])].map(([c, e]) => ({ code: c, ...e })),
     floodFlush: () => sh.flood?.flush?.(), floodStats: () => sh.flood?.stats,
+    // v52 Quiet safety number: diggable compare of pinned profile pubs; optional local verified flag (no banner/nag).
+    safetyVerified: () => ({ ...safetyVerified }),
+    async safetyFor(peer) { const SN = await import('./safety-number.js'); const pub = SN.peerProfilePub({ node, e2e }, peer); if (!pub) return null;
+      const sn = await SN.safetyNumber({ code: id.code, pub: id.keys.pub }, { code: peer, pub }); if (!sn) return null;
+      const next = SN.pruneVerified(safetyVerified, peer, sn.fp); if (next !== safetyVerified) { safetyVerified = next; await save(); }
+      const ver = SN.matchVerified(safetyVerified, peer, sn.fp); return { ...sn, peerPub: pub, myPub: id.keys.pub, myHint: await SN.ownKeyHint(id.keys.pub), verified: !!ver, verifiedAt: ver?.at || null }; },
+    async markSafetyVerified(peer, fp) { const SN = await import('./safety-number.js'); safetyVerified = SN.markVerified(safetyVerified, peer, fp); await save(); return safetyVerified[peer] || null; },
+    async clearSafetyVerified(peer) { const SN = await import('./safety-number.js'); safetyVerified = SN.clearVerified(safetyVerified, peer); await save(); return true; },
     setRetention: (c, o) => { const ok = node.setRetention(c, o); node.sweep(); node.persistChatsSoon?.(); return ok; }, safetyConversation: c => node.safety.conversation(c),
     link: c => linkFor(c), links, outbox: node.outbox,
     async recent(mode) { if (local) return []; const r = await gfetch('/api/bootstrap?recent=1&code=' + encodeURIComponent(id.code) + (mode ? '&mode=' + mode : '') + (DISC.isMinor(me) ? '' : '&adult=1')).then(x => x.ok ? x.json() : { recent: [] }).catch(() => ({ recent: [] }));

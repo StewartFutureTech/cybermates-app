@@ -63,7 +63,7 @@ export async function chatView(v, st, render, vault, me) {
     <div class="card small"><b>🔥 Burn mode</b> ${burn ? `ON (${burn / 1000}s after read)` : b.mine ? 'you proposed — waiting for them' : b.theirs ? 'they proposed' : 'off'}
       ${burn ? '<button id="mburnoff">Turn off</button>' : `<button id="mburn">${b.theirs ? 'Agree' : 'Propose'} (60s)</button>`}</div>
     <div class="card small"><b>📅 Plans note</b> (encrypted on this phone; short-lived, not a saved chat)<br><input id="mplan" maxlength="280" value="${esc(plans[c]?.text || '')}" placeholder="e.g. Halo tomorrow 8pm" style="width:70%"><button id="mplansave">Save</button>${plans[c] ? ` <span class="muted">expires ${new Date(plans[c].expires).toLocaleString()}</span>` : ''}</div>
-    <div class="row gap">${friend ? '<span class="small">👥 Friends</span>' : `<button id="mfr">Add friend</button>`}<button id="mrep" class="ghost">Report</button><button id="mblk" class="ghost">Block</button></div>`;
+    <div class="row gap">${friend ? '<span class="small">👥 Friends</span>' : `<button id="mfr">Add friend</button>`}<button id="msafety" class="ghost">Safety number</button><button id="mrep" class="ghost">Report</button><button id="mblk" class="ghost">Block</button></div>`;
   const q = s => v.querySelector(s), res = t => q('#mres').textContent = t;
   q('#mback').onclick = () => { st.meshChat = null; render(); };
   q('#msf') && (q('#msf').onsubmit = async e => { e.preventDefault(); const t = q('#mtxt').value.trim(); if (!t) return;
@@ -76,6 +76,7 @@ export async function chatView(v, st, render, vault, me) {
   q('#mfr') && (q('#mfr').onclick = () => { m.requestFriend(c); q('#mfr').textContent = 'Requested'; q('#mfr').disabled = true; });
   q('#mrep').onclick = async () => { await reportFlow(m, c, ch.msgs.filter(x => x.from !== m.code).slice(-5).map(x => x.text).join('\n')); render(); };
   q('#mblk').onclick = async () => { if (confirm('Block?')) { await m.block(c); st.meshChat = null; render(); } };
+  q('#msafety') && (q('#msafety').onclick = () => openSafetySheet(m, c, nameOf(pv), render));
   if (friend) wireChatExtras(v, m, c, render);
   q('#mtxt')?.focus();
 }
