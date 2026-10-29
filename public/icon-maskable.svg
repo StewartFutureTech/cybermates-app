@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><filter id="gw" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation=".9" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><radialGradient id="bgg"><stop offset="0" stop-color="#19e6ff" stop-opacity=".16"/><stop offset="1" stop-color="#19e6ff" stop-opacity="0"/></radialGradient></defs><rect width="32" height="32" rx="0" fill="#05060a"/><rect width="32" height="32" rx="0" fill="url(#bgg)"/><g transform="translate(6.08 6.08) scale(0.62)" fill="none" stroke-linecap="square" stroke-linejoin="miter" filter="url(#gw)"><path stroke="#19e6ff" stroke-width="1.6" d="M16 1.5 28.6 8.8V23.2L16 30.5 3.4 23.2V8.8Z"/>
+  <path stroke="#ff2bd6" stroke-width="2.6" d="M21.5 10.2H13.2L10 13.4V18.6L13.2 21.8H21.5"/>
+  <path stroke="#ff9be9" stroke-width="1.2" d="M21.5 14.2H15.4L14.2 15.4V16.6L15.4 17.8H21.5"/>
+  <path stroke="#19e6ff" stroke-width="1.2" opacity=".75" d="M16 1.5V5M16 27V30.5M3.4 16H6.4M25.6 16H28.6"/>
+  <circle fill="#fff" stroke="#ff2bd6" stroke-width=".8" cx="21.5" cy="10.2" r="1.3"/><circle fill="#fff" stroke="#ff2bd6" stroke-width=".8" cx="21.5" cy="21.8" r="1.3"/>
+  </g></svg>

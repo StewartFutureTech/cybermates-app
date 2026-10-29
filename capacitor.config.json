@@ -1,0 +1,11 @@
+{
+  "appId": "com.cybermates.app",
+  "appName": "Cybermates",
+  "webDir": "dist",
+  "ios": {
+    "allowsInlineMediaPlayback": true
+  },
+  "android": {
+    "mediaPlaybackRequiresUserGesture": false
+  }
+}

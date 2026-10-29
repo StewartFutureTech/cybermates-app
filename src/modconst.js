@@ -1,0 +1,3 @@
+// Moderation constants shared by the admin UI (src/admin.js) and server routes (api/_lib/mod.js). No secrets.
+export const CATEGORIES = ['harassment', 'spam/scam', 'fake profile', 'underage user', 'csam', 'threats/violence', 'illegal content (other)', 'other'];
+export const CSAM_REMINDER = 'CSAM ban logged with a 1-year evidence-preservation hold (mod_actions.preserve_until). Per docs/trust-safety.md: do NOT download/forward the material; if a child is in danger call 911; report to the NCMEC CyberTipline (https://report.cybertip.org/) and record the report ID in mod_actions.ncmec_report_id; non-US: also IWF/INHOPE. Do not notify the user beyond the ban notice.';

@@ -1,0 +1,31 @@
+// Browser smoke for the analog Snake/Tron (2D + 3D): no page errors, my heading follows a pointer drag and a held ←,
+// adaptive tier reported, screenshots saved. Usage: node scripts/shots-analog.mjs  (BASE env for a deployed URL)
+import { spawn } from 'node:child_process'; import fs from 'node:fs'; import puppeteer from 'puppeteer-core';
+const PORT = 4213, U = process.env.BASE || `http://localhost:${PORT}/`, OUT = '/workspace/cybermates-shots/analog'; fs.mkdirSync(OUT, { recursive: true });
+let srv; if (!process.env.BASE) { srv = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true }); await new Promise(r => setTimeout(r, 2500)); }
+const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: true, protocolTimeout: 240000, args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
+let fail = 0; const ok = (c, m) => { console.log(c ? 'ok' : 'FAIL', m); if (!c) fail = 1; };
+for (const game of (process.env.GAMES || 'snake,tron').split(',')) for (const d3 of (process.env.D3 || '0,1').split(',').map(x => x === '1')) { const tag = `${game}-${d3 ? '3d' : '2d'}`; const p = await b.newPage(); p.setDefaultTimeout(120000); const errs = [];
+  p.on('pageerror', e => errs.push(String(e.message || e))); p.on('console', m => { if (m.type() === 'error' && !/favicon|WebSocket|net::|404|Failed to load resource|relay|ICE|signal/i.test(m.text())) errs.push(m.text()); });
+  await p.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await p.evaluateOnNewDocument(v => { localStorage.setItem('cm.sound', 'off'); localStorage.setItem('cm.arc.3d', v ? 'on' : 'off'); }, d3);
+  await p.goto(U + `?loaderMin=0&force3d=${d3 ? 1 : 0}&arcmode=mass&arcgame=${game}`);
+  const ag = await p.waitForSelector('#ag-dob', { timeout: 30000 }).catch(() => null); if (ag) { await p.$eval('#ag-dob', e => e.value = '1995-05-05'); await p.$eval('#ag-go', e => e.click()); }
+  const tm = await p.waitForSelector('#tm-ok', { timeout: 20000 }).catch(() => null); if (tm) { await p.$eval('#tm-ok', e => e.click()); await p.$eval('#tm-yes', e => e.click()); await p.waitForSelector('#losswarn', { timeout: 8000 }).then(() => p.$eval('#loss-ok', e => e.click())).catch(() => {}); }
+  await p.waitForFunction(() => !document.getElementById('jackin') && document.querySelector('nav'), { timeout: 90000 }); await p.evaluate(() => [...document.querySelectorAll('button')].find(x => x.textContent.trim() === 'Skip')?.click());
+  await p.$eval('nav [data-tab=arcade]', e => e.click()); await p.waitForFunction(() => globalThis.__cmArc?.world?.(), { timeout: 60000 }); await new Promise(r => setTimeout(r, d3 ? 6000 : 2500));
+  const info = () => p.evaluate(() => { const W = __cmArc.world(), m = W.players.get(__cmArc.me); return { d: m?.deaths, h: m?.h, alive: m?.alive, tick: W.tick, n: W.players.size, analog: !!W.game.analog, tier: globalThis.__cm3d?.tier, has3d: !!__cmArc.t3() }; });
+  const i0 = await info(); ok(i0.analog && i0.n >= 8 && i0.tick > 10, `${tag}: arena running (${i0.n} players, tick ${i0.tick})`); if (d3) ok(i0.has3d && i0.tier >= 0, `${tag}: 3D renderer up, quality tier ${i0.tier}`);
+  // pointer steering: aim straight down (2D: below centre; 3D: aim via the same handler)
+  const sel = d3 ? '#arc-3d-cv' : '#arc-cv'; await p.evaluate(() => [...document.querySelectorAll('h3')].filter(h => /mood/i.test(h.textContent)).forEach(h => (h.closest('.card') || h).remove())); // first-login mood card is not part of the game
+  await p.$eval(sel, e => e.scrollIntoView({ block: 'center' })); await new Promise(r => setTimeout(r, 300)); const bx = await p.$eval(sel, e => { const r = e.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; });
+  await p.evaluate(() => { const m = __cmArc.world().players.get(__cmArc.me); if (!m.alive) return; });
+  if (process.env.DBG) await p.evaluate(() => { globalThis.__pd = []; addEventListener('pointerdown', e => __pd.push(e.pointerType + ':' + e.target.id + ':' + e.defaultPrevented), true); const W = __cmArc.world(); const o = W.input.bind(W); W.input = (...a) => { __pd.push('in:' + JSON.stringify(a[1])); return o(...a); }; });
+  await p.evaluate(() => document.getElementById('moodpick')?.remove());
+  const tx = bx[0] + bx[2] * 0.5, ty = Math.min(bx[1] + bx[3] * 0.9, 840); await p.mouse.move(tx, ty); await p.mouse.down(); await p.mouse.move(tx + 1, ty); await new Promise(r => setTimeout(r, 1500)); await p.mouse.up();
+  const aim = await p.evaluate(() => __cmArc.world().players.get(__cmArc.me).aim); if (process.env.DBG) console.log("dbg", await p.evaluate(() => JSON.stringify(__pd)), tx, ty, bx.join(","), await p.evaluate((x, y) => { const e = document.elementFromPoint(x, y); return e?.tagName + ":" + e?.textContent.slice(0,60) + " parent:" + e?.parentElement?.className + " pos:" + getComputedStyle(e.closest("[class]")||e).position; }, tx, ty)); await new Promise(r => setTimeout(r, 400)); ok(typeof aim === 'number', `${tag}: pointer drag sets a target heading (${aim?.toFixed?.(2)})`);
+  if (!d3) { const i1 = await info(); ok(Math.abs(Math.atan2(Math.sin(i1.h - Math.PI / 2), Math.cos(i1.h - Math.PI / 2))) < 0.5 || !i1.alive || i1.d > i0.d, `${tag}: heading turned toward the pointer (h ${i1.h?.toFixed(2)} ≈ ${(Math.PI / 2).toFixed(2)}${i1.d > i0.d ? ', then crashed + respawned' : ''})`); }
+  const hA = (await info()).h; await p.keyboard.down('ArrowLeft'); await new Promise(r => setTimeout(r, 600)); const hB = (await info()).h; await p.keyboard.up('ArrowLeft'); await new Promise(r => setTimeout(r, 300));
+  const turn = await p.evaluate(() => __cmArc.world().players.get(__cmArc.me).turnIn); ok(turn === 0 && Math.abs(Math.atan2(Math.sin(hB - hA), Math.cos(hB - hA))) > 0.2, `${tag}: holding ← rotates (${(hB - hA).toFixed(2)} rad), release stops`);
+  await p.screenshot({ path: `${OUT}/${tag}.png` }); ok(!errs.length, `${tag}: no page errors${errs.length ? ' -> ' + errs.slice(0, 3).join(' | ') : ''}`); await p.close(); }
+await b.close(); if (srv) try { process.kill(-srv.pid); } catch {} console.log(fail ? 'ANALOG SHOTS FAILED' : 'ALL ANALOG SHOTS OK'); process.exit(fail);

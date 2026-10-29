@@ -1,0 +1,12 @@
+<!doctype html><meta charset=utf-8><title>calls harness</title>
+<button id="callbtn" hidden>📞 Call</button><video id="remote" autoplay playsinline muted></video><pre id="log"></pre>
+<script type="module">
+import { DirectLink, canCall } from '/src/call.js';
+const q = new URLSearchParams(location.search), me = q.get('me'), peer = q.get('peer'), bc = new BroadcastChannel('calls-test');
+const parent = { t: { videoCalls: !q.get('novideo'), voiceCalls: true }, async allowed(k) { return this.t[k] !== false; } };
+const W = window; W.events = []; W.remote = null;
+const render = () => { document.getElementById('callbtn').hidden = !W.link.up; };
+W.sent = []; W.link = new DirectLink({ me, peer, send: m => { W.sent.push(m.t); bc.postMessage({ to: peer, m }); }, onState: s => { W.events.push('state:' + s); render(); }, onTrack: s => { W.remote = s; document.getElementById('remote').srcObject = s; }, onCall: (s, o) => W.events.push('call:' + s + (o?.reason ? ':' + o.reason : '')) }).open();
+W.got = []; bc.onmessage = e => { if (e.data.to !== me) return; W.got.push(e.data.m.t); W.link.onSignal(e.data.m).catch(x => W.events.push('sigerr:' + x.message)); };
+W.gate = video => canCall({ friend: true, linkUp: W.link.up, video, parent });
+</script>

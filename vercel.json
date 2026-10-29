@@ -1,0 +1,1 @@
+{"buildCommand": "npm run build", "outputDirectory": "dist", "framework": "vite", "crons": [{"path": "/api/cron-inactive", "schedule": "0 4 * * *"}], "functions": {"api/[fn].js": {"includeFiles": "docs/help-kb.md"}}}

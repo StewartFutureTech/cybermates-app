@@ -1,0 +1,30 @@
+{
+ "name": "cybermates",
+ "private": true,
+ "version": "0.1.0",
+ "type": "module",
+ "scripts": {
+  "dev": "vite",
+  "build": "vite build",
+  "preview": "vite preview",
+  "smoke": "node --no-warnings scripts/smoke.mjs",
+  "e2e": "node scripts/e2e-mesh.mjs",
+  "build:admin": "vite build --mode admin --outDir dist-admin",
+  "build:all": "vite build && vite build --mode admin --outDir dist-admin",
+  "sim": "node scripts/sim-users.mjs",
+  "test": "npm run build:all && npm run smoke && npm run e2e",
+  "regress": "bash scripts/regress.sh"
+ },
+ "devDependencies": {
+  "@capacitor/android": "^6.2.2",
+  "@capacitor/cli": "^6.2.2",
+  "@capacitor/core": "^6.2.2",
+  "puppeteer-core": "^23.11.1",
+  "vite": "^5.4.0"
+ },
+ "dependencies": {
+  "@supabase/supabase-js": "^2.118.0",
+  "three": "^0.170.0",
+  "tweetnacl": "^1.0.3"
+ }
+}

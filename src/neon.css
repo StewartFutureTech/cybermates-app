@@ -1,0 +1,60 @@
+/* ===== Neon grid v2 (shop worker, 2026-10-21): glass panels, theme-colored neon edges, animated grid floor =====
+   Every color comes from theme vars (--cy = the user's theme color, --hot/--acid accents, --bg/--card/--fg/--line).
+   Motion: grid drift + edge sweep only; off under prefers-reduced-motion and html.lowfx (low-power default). */
+:root{--neon:var(--cy);--neon-soft:color-mix(in srgb,var(--neon) 35%,transparent);--neon-faint:color-mix(in srgb,var(--neon) 14%,transparent);--glass:color-mix(in srgb,var(--card) 62%,transparent);--navh:58px}
+/* animated perspective grid floor (one GPU-composited layer; transform-only animation) */
+body::after{content:"";position:fixed;left:-50%;right:-50%;bottom:0;height:46vh;z-index:0;pointer-events:none;opacity:.32;
+  background:linear-gradient(var(--neon-soft) 1px,transparent 1px) 0 0/100% 34px,linear-gradient(90deg,var(--neon-soft) 1px,transparent 1px) 0 0/34px 100%;
+  transform:perspective(320px) rotateX(62deg) translateY(0);transform-origin:50% 100%;
+  -webkit-mask-image:linear-gradient(transparent,var(--bg) 70%);mask-image:linear-gradient(transparent,var(--bg) 70%);animation:nn-grid 6s linear infinite;will-change:transform}
+@keyframes nn-grid{to{transform:perspective(320px) rotateX(62deg) translateY(34px)}}
+#app{position:relative;z-index:2}
+/* glass panels with neon edges */
+.card,.glass{background:var(--glass);-webkit-backdrop-filter:blur(10px) saturate(1.25);backdrop-filter:blur(10px) saturate(1.25);border:1px solid var(--neon-soft);box-shadow:inset 0 0 0 1px var(--neon-faint),inset 0 1px 0 color-mix(in srgb,var(--fg) 8%,transparent),0 0 14px var(--neon-faint)}
+.card{position:relative;transition:border-color .2s,box-shadow .2s}
+.card:hover,.card:focus-within{border-color:var(--neon);box-shadow:inset 0 0 0 1px var(--neon-soft),0 0 18px var(--neon-soft)}
+.card.warn{border-color:color-mix(in srgb,var(--hot) 55%,transparent);background:color-mix(in srgb,var(--hot) 8%,var(--glass))}
+/* light sweep along the top edge (decorative) */
+.neon-edge:not(.card)::after,.wallet::after{content:"";position:absolute;left:0;right:0;top:-1px;height:2px;background:linear-gradient(90deg,transparent,var(--neon),transparent);background-size:40% 100%;background-repeat:no-repeat;animation:nn-sweep 3.6s ease-in-out infinite;pointer-events:none}
+@keyframes nn-sweep{0%{background-position:-60% 0}100%{background-position:160% 0}}
+.wallet{position:relative;overflow:hidden}
+/* nav: glass bar + active neon tab indicator */
+nav{-webkit-backdrop-filter:blur(16px) saturate(1.3);backdrop-filter:blur(16px) saturate(1.3);background:color-mix(in srgb,var(--bg) 72%,transparent);border-top:1px solid var(--neon-soft);box-shadow:0 -1px 0 var(--neon-faint),0 -8px 24px var(--neon-faint)}
+nav button{position:relative;transition:color .2s}
+nav button.on{color:var(--neon);text-shadow:0 0 8px var(--neon-soft)}
+nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;height:2px;background:var(--neon);box-shadow:0 0 10px var(--neon),0 0 2px var(--neon);border-radius:2px}
+nav button.on span,nav button.on svg{filter:drop-shadow(0 0 6px var(--neon-soft))}
+header{-webkit-backdrop-filter:blur(16px) saturate(1.3);backdrop-filter:blur(16px) saturate(1.3);background:color-mix(in srgb,var(--bg) 70%,transparent)}
+/* inbox / friends rows: neon left rail */
+.card.row{border-left:2px solid var(--neon-soft)}
+.card.row.req.boosted,.card.boosted{border-left-color:var(--hot);box-shadow:inset 3px 0 12px color-mix(in srgb,var(--hot) 22%,transparent),0 0 14px color-mix(in srgb,var(--hot) 18%,transparent)}
+.badge{box-shadow:0 0 8px var(--neon-soft)}
+/* profile avatars: neon ring */
+.av{box-shadow:0 0 0 2px var(--neon-soft),0 0 12px var(--neon-faint)}
+/* inputs & buttons */
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--neon);box-shadow:0 0 0 1px var(--neon),0 0 12px var(--neon-soft)}
+button.primary{box-shadow:0 0 0 1px var(--neon-soft),0 0 12px var(--neon-faint)}
+button.primary:hover:not(:disabled){box-shadow:0 0 0 1px var(--neon),0 0 18px var(--neon-soft)}
+.swatches button.on{box-shadow:0 0 0 1px var(--neon),0 0 14px var(--neon-soft)}
+h2,h3{text-shadow:0 0 6px var(--neon-soft),0 0 18px var(--neon-faint)}
+/* friend link */
+.fl-search{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.fl-search input{flex:1;min-width:0}.fl-search p{flex-basis:100%;margin:0}
+.fl-create{margin:10px 0;align-items:center;flex-wrap:wrap}.fl-create select{width:auto;display:inline-block}
+.fl-code{font:800 26px/1.2 var(--mono);letter-spacing:3px;text-align:center;padding:12px 6px;margin:8px 0;color:var(--neon);border:1px dashed var(--neon-soft);text-shadow:0 0 10px var(--neon-soft);user-select:all;word-break:break-all}
+/* shop */
+.shopitem.best{border-color:var(--hot);box-shadow:0 0 0 1px color-mix(in srgb,var(--hot) 50%,transparent),0 0 18px color-mix(in srgb,var(--hot) 25%,transparent)}
+.shopitem button.primary{min-width:76px}.shopitem .emo{font-size:20px;letter-spacing:4px;margin:2px 0}
+.streak{display:flex;gap:6px;margin-top:6px}.streak i{width:22px;height:6px;border:1px solid var(--neon-soft)}.streak i.on{background:var(--neon);box-shadow:0 0 8px var(--neon)}
+.ledger{gap:8px;padding:4px 0;border-bottom:1px solid var(--neon-faint)}
+.adslot{position:fixed;left:0;right:0;bottom:calc(var(--navh) + env(safe-area-inset-bottom));z-index:4;display:flex;align-items:center;gap:8px;padding:6px 10px;margin:0;border-radius:0;font-size:12px;border-left:0;border-right:0}
+.adslot .grow{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.adtag{font:700 9px var(--mono);letter-spacing:1px;padding:1px 4px;border:1px solid var(--mut);color:var(--mut)}
+body.has-ad main{padding-bottom:150px}
+.modal.rewarded .card{max-width:360px;width:100%;text-align:center}.advideo{aspect-ratio:16/9;display:grid;place-items:center;margin:10px 0;padding:12px;border:1px solid var(--neon-soft);background:linear-gradient(var(--neon-faint) 1px,transparent 1px) 0 0/18px 18px,linear-gradient(90deg,var(--neon-faint) 1px,transparent 1px) 0 0/18px 18px}
+/* performance + accessibility */
+html.lowfx body::after{display:none}
+html.lowfx .card,html.lowfx .glass,html.lowfx nav,html.lowfx header{-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--card)}
+html.lowfx .neon-edge:not(.card)::after,html.lowfx .wallet::after{display:none}
+@media (prefers-reduced-motion:reduce){body::after{animation:none;transform:perspective(320px) rotateX(62deg)}.neon-edge::after,.wallet::after{animation:none;display:none}.card{transition:none}}
+@media (max-width:420px){.card,.glass{-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}body::after{opacity:.24}}
+html[data-theme=light] body::after{opacity:.18}
