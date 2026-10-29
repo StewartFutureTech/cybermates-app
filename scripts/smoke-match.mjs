@@ -68,7 +68,7 @@ let T0 = 0; const mm = new M.Matchmaker({ now: () => T0, isBlocked: (a, b) => a 
 assert(mm.enqueue({ code: 'BAN', age: 30 }, 'chess', '1v1').ok === false, 'banned player cannot queue');
 mm.enqueue({ code: 'A1', age: 30 }, 'chess', '1v1'); const r1 = mm.enqueue({ code: 'K1', age: 13, minor: true }, 'chess', '1v1'); assert(!r1.match, 'adult and minor never matched together');
 const r2 = mm.enqueue({ code: 'K2', age: 14, minor: true }, 'chess', '1v1'); assert(r2.match && r2.match.seats.every(x => x.minor), 'two minors matched together');
-mm.enqueue({ code: 'A2', age: 30 }, 'connect4', '2v2'); mm.enqueue({ code: 'A3', age: 30 }, 'connect4', '2v2'); T0 = M.FILL_MS + 1; const formed = mm.tick();
+mm.enqueue({ code: 'A2', age: 30 }, 'connect4', '2v2'); mm.enqueue({ code: 'A3', age: 30 }, 'connect4', '2v2'); T0 = M.FILL_MS + 1; const formed = mm.tick().matches.map(r => r.match); // v51: tick() -> { matches, invites, expired }
 const c4m = formed.find(x => x.game === 'connect4'), chm = formed.find(x => x.game === 'chess'); assert(c4m && c4m.seats.filter(x => !x.ai).length === 1 && c4m.seats.filter(x => x.ai).length === 3, 'blocked pair not seated together; AI fills empty seats after the wait');
 assert(chm && chm.seats.some(x => x.ai) && chm.seats.some(x => x.code === 'A1'), 'lonely adult gets an AI opponent');
 assert(!mm.enqueue({ code: 'Z', age: 30 }, 'drawguess', '1v1').ok, 'game/mode mismatch refused');

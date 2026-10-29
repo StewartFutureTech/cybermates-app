@@ -35,10 +35,31 @@ export function hexToHsl(hex) { const n = parseInt(hex.replace('#', '').slice(0,
   let h = 0; if (d) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [((h * 60) + 360) % 360, d ? d / (1 - Math.abs(2 * l - 1)) : 0, l]; }
 export const hsl = (h, s, l) => `hsl(${Math.round(h)}, ${Math.round(s * 100)}%, ${Math.round(l * 100)}%)`; // comma form: valid CSS AND parseable by THREE.Color
 const hueDist = (a, b) => { const d = Math.abs(a - b) % 360; return Math.min(d, 360 - d); };
-export function distinctColors(players) { const out = [], used = [];
-  for (const p of [...players].sort((a, b) => (a.code < b.code ? -1 : 1))) { let [h, s, l] = hexToHsl(p.color || palette().cy); s = Math.max(s, 0.65); l = Math.min(Math.max(l, 0.5), 0.68); let shifted = false, k = 0;
-    while (used.some(u => hueDist(u, h) < CLASH_DEG) && k++ < 12) { h = (h + 137.508) % 360; shifted = true; }
-    used.push(h); out.push({ code: p.code, color: hsl(h, s, l), hue: h, outline: shifted, shifted }); }
+// SAME-THEME SHADES: the first player of a theme gets the pure theme colour; every further same-theme player in the game
+// gets a deterministic, perceptually distinct SHADE of that hue family (OKLCH: lightness / chroma / small hue offsets, e.g.
+// green -> lime, emerald, mint), each at least MIN_DE (OKLab ΔE) from every colour already handed out — 100 guaranteed.
+// Different themes whose hues clash still get the old golden-angle hue shift + outline.
+export const MIN_DE = 0.025;
+const srgbToLin = c => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4), linToSrgb = c => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+export function hexToOklab(hex) { const n = parseInt(String(hex).replace('#', '').slice(0, 6), 16), [r, g, b] = [n >> 16 & 255, n >> 8 & 255, n & 255].map(v => srgbToLin(v / 255));
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b), m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b), s2 = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s2, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s2, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s2]; }
+function oklabToRgb([L, a, b]) { const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3, m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3, s2 = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  return [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s2, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s2, -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s2].map(linToSrgb); }
+const inGamut = rgb => rgb.every(v => v >= -1e-4 && v <= 1 + 1e-4);
+const rgbHex = rgb => '#' + rgb.map(v => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0')).join('');
+export const deltaE = (x, y) => Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+// k-th shade (k >= 1) of a base colour, avoiding everything in `taken` (OKLab triples). Deterministic.
+export function themeShade(baseHex, k, taken = []) { const [L0, a0, b0] = hexToOklab(baseHex), C0 = Math.hypot(a0, b0), H0 = Math.atan2(b0, a0);
+  for (let t = 0; t < 4000; t++) { const q = k * 7 + t, u = (q * 0.6180339887) % 1, v = (q * 0.7548776662) % 1, w = (q * 0.5698402910) % 1; // low-discrepancy (R3) sequence
+    const L = 0.36 + u * 0.58, C = 0.02 + v * Math.max(C0 * 1.3, 0.16), H = H0 + (w - 0.5) * 1.1; const lab = [L, C * Math.cos(H), C * Math.sin(H)], rgb = oklabToRgb(lab); if (!inGamut(rgb)) continue;
+    const hex = rgbHex(rgb), real = hexToOklab(hex); if (taken.every(x => deltaE(x, real) >= MIN_DE)) return hex; }
+  return baseHex; }
+export function distinctColors(players) { const out = [], used = [], taken = [], groups = new Map();
+  for (const p of [...players].sort((a, b) => (a.code < b.code ? -1 : 1))) { const base = toHex(p.color || palette().cy).toLowerCase(), k = groups.get(base) || 0; groups.set(base, k + 1);
+    if (k > 0) { const c = themeShade(base, k, taken); taken.push(hexToOklab(c)); out.push({ code: p.code, color: c, hue: hexToHsl(c)[0], outline: false, shifted: false, shade: k }); continue; }
+    let [h, s, l] = hexToHsl(base), shifted = false, n = 0; while (used.some(u => hueDist(u, h) < CLASH_DEG) && n++ < 12) { h = (h + 137.508) % 360; shifted = true; }
+    used.push(h); const c = shifted ? hsl(h, Math.max(s, 0.65), Math.min(Math.max(l, 0.5), 0.68)) : base; taken.push(hexToOklab(toHex(c))); out.push({ code: p.code, color: c, hue: h, outline: shifted, shifted, shade: 0 }); }
   return out; }
 // ---- SINGLE PALETTE SOURCE for every arcade game (2D + 3D). All colours derive from the active app theme tokens (CSS vars
 // set by src/theme.js). Derived shades (hull, glass, smoke, star) are mixes of those tokens — no game hardcodes a colour.

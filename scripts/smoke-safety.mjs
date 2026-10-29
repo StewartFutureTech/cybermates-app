@@ -64,6 +64,6 @@ const snSrc = readFileSync(new URL('../src/safety-number.js', import.meta.url), 
 const am = readFileSync(new URL('../src/app-mesh.js', import.meta.url), 'utf8');
 assert(/openSafetySheet|Safety number/.test(ui) && /safetyFor/.test(am), 'Quiet UI + mesh API wired');
 assert(!/key changed|re-verify|untrusted key|warn-until-verified|strict.?verif/i.test(snSrc + ui.match(/openSafetySheet[\s\S]*$/)?.[0] || ''), 'no scare / nag copy in Quiet sheet');
-assert(/cm-v52-2026-10-28/.test(readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8')), 'SW stamp cm-v52-2026-10-28');
+assert(/cm-v55-2026-10-29/.test(readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8')), 'SW stamp cm-v55-2026-10-29');
 
 console.log('ALL OK smoke-safety');

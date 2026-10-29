@@ -10,7 +10,8 @@
 import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
 const PORT = 4195, URL0 = `http://localhost:${PORT}/`;
-let browser, errs = [], known = [], curGame = ''; // known: PRE-EXISTING battleship watcher error (same in Battleship Flat, see v55 notes) const srv = spawn('npx', ['vite', 'preview', '--outDir', 'dist-admin', '--port', String(PORT), '--strictPort'], { stdio: 'pipe', detached: true });
+let browser, errs = [], known = [], curGame = ''; // known: PRE-EXISTING battleship watcher error (same in Battleship Flat, see v55 notes)
+const srv = spawn('npx', ['vite', 'preview', '--outDir', 'dist-admin', '--port', String(PORT), '--strictPort'], { stdio: 'pipe', detached: true });
 const cleanup = async code => { try { await browser?.close(); } catch {} try { process.kill(-srv.pid); } catch {} process.exit(code); };
 const assert = (c, m) => { if (!c) { console.error('E2E FAIL', m); cleanup(1); throw new Error('fail'); } else console.log('ok', m); };
 setTimeout(() => { console.error('E2E FAIL global timeout'); cleanup(1); }, 900e3);
@@ -24,7 +25,7 @@ const open = async (as, game, mode = '1v1') => { const p = await browser.newPage
   await p.goto(URL0 + '?as=' + as + '&loaderMin=300&arcmode=' + mode + '&arcgame=' + encodeURIComponent(game));
   const ag = await p.waitForSelector('#ag-dob', { timeout: 15000 }).catch(() => null); if (ag) { await p.$eval('#ag-dob', e => e.value = '1995-05-05'); await p.click('#ag-go'); }
   const terms = await p.waitForSelector('#tm-ok', { timeout: 4000 }).catch(() => null); if (terms) { await p.click('#tm-ok'); await p.click('#tm-yes'); await p.waitForSelector('#losswarn', { timeout: 8000 }).then(() => p.$eval('#loss-ok', e => e.click())).catch(() => {}); }
-  await until(p, () => globalThis.__cmMesh?.()?.code); await until(p, () => !document.getElementById('jackin')); if (await p.$('#moodskip')) await p.click('#moodskip').catch(() => {});
+  await until(p, () => globalThis.__cmMesh?.()?.code, null, 60000); /* slow after many tabs */ await until(p, () => !document.getElementById('jackin')); if (await p.$('#moodskip')) await p.click('#moodskip').catch(() => {});
   await p.evaluate(() => document.getElementById('moodpick')?.remove()); await p.$eval('nav [data-tab=arcade]', e => e.click());
   await until(p, () => globalThis.__cmMatch?.()?.id, null, 30000); return p; };
 const M = p => p.evaluate(() => globalThis.__cmMatch());

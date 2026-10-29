@@ -7,7 +7,7 @@ const { PartyVoice } = await import('../src/party/voice.js');
 const c = BG.card('ME', 0); ok(c.length === 25 && c[12] === 0, 'bingo card 25 with free centre');
 ok([0, 1, 2, 3, 4].every(col => [0, 1, 2, 3, 4].every(r => { const v = c[r * 5 + col]; return v === 0 || (v > col * 15 && v <= col * 15 + 15); })), 'columns B/I/N/G/O ranges');
 ok(String(BG.sequence('r', 1)) === String(BG.sequence('r', 1)) && new Set(BG.sequence('r', 1)).size === 75, 'deterministic 75-ball sequence');
-const R = new BG.BingoRoom({ id: 'b1', now: 0 }); R.add('ME'); ok(R.bots().length === 7, 'room bot-filled to 8');
+const R = new BG.BingoRoom({ id: 'b1', now: 0 }); R.add('ME', { now: 0 }); // v51: add() takes the join time (mid-round joiners queue) ok(R.bots().length === 7, 'room bot-filled to 8');
 ok(R.claim('ME', 1).ok === false, 'early claim rejected');
 const card = R.cardOf('ME'), seq = BG.sequence('b1', 0); const row = [0, 1, 2, 3, 4]; const need = row.map(i => card[i]); const at = Math.max(...need.map(n => seq.indexOf(n))) ; const t = at * R.callMs + 1;
 ok(R.daub('ME', 0, 0) === (seq[0] === card[0]), 'cannot daub an uncalled number');

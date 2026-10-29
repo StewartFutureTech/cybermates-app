@@ -81,7 +81,7 @@ export class LiveNode {
     const bk = this.keyOf?.(c); if (bk && bk !== p.k) { D.sig++; this.bindDrops = (this.bindDrops || 0) + 1; return null; } // v43: advert must use the key this ID is bound to (src/idbind.js)
     const pin = this.pins.get(c); if (pin && pin !== p.k && !(bk && bk === p.k)) { D.sig++; return null; }
     if (!verifyProfile(sp, p.k)) { D.sig++; return null; } this.pins.set(c, p.k); return sp; }
-  consider(p) { const sp = this._admit(p); if (!sp) return false; const c = sp.code, s = softMatch(this.tags, sp.profile, this.mode, this.seek); if (s == null) return false;
+  consider(p) { const sp = this._admit(p); if (!sp) return false; const c = sp.code; if (this.cutBy?.has(c)) return false; /* v55: they swiped us left -> never re-admit */ const s = softMatch(this.tags, sp.profile, this.mode, this.seek); if (s == null) return false;
     if (softClearsBoth(s, this.tags, sp.profile, this.mode)) { this.softPassed.add(c); if (!this.fullCache.has(c) && !this._fullPending?.has(c)) this._requestFull(c); } // v51: soft→hard
     const cur = this.bucket.get(c); if (cur) { cur.at = this.now(); if (sp.rev >= cur.sp.rev) { cur.sp = sp; cur.score = s; } return false; }
     if (this.bucket.size >= this.bucketMax) { const w = this.weakest(); if (!w || w.score >= s) return false; this.bucket.delete(w.code); this.cap.drop(w.code); }
@@ -129,7 +129,7 @@ export class LiveNode {
     switch (m.t) {
       case 'tent': if (!known) return; this._send(from, this._withPres(from, { t: 'tent-ans', peers: this.top(TENT_K, m.pres.sp.profile, this.mode, null, from) })); break;
       case 'tent-ans': for (const p of (m.peers || []).slice(0, TENT_K)) this.consider(p); break;
-      case 'cut': if (this.bucket.delete(from)) { this.cap.drop(from); this.churn++; } break;
+      case 'cut': (this.cutBy ||= new Set()).add(from); if (this.bucket.delete(from)) { this.cap.drop(from); this.churn++; } break;
       case 'q': { const q = m.q; if (!q?.id || this.seenQ.has(q.id) || !known) return; this.seenQ.add(q.id); if (this.seenQ.size > 4000) this.seenQ = new Set([...this.seenQ].slice(-2000));
         const src = this._admit(q.src); if (!src || src.code === this.code) return; // band + sig + block checked on the ORIGINATOR too, every hop
         const hits = this._local(q).filter(h => !this.rejected.has(h.sp.code)); if (hits.length) this._send(src.code, { t: 'qa', id: q.id, hop: q.hop, hits });

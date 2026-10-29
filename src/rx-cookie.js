@@ -39,7 +39,7 @@ export class CookieGate {
     const pv = Number(msg?.pv) || 0;
     if (sender && pv >= PROTO && !this.isKnown0(sender) && !this.isCookied(sender)) {
       const cached = this._ck.get(sender);
-      if (msg.cookie && cached && (msg.cookie === cached.ch || msg.cookie === cached.prev)) this.markCookied(sender);
+      const ans = msg.cookie || msg.ck; /* v55: cookie answers (hello) carry the field 'ck' */ if (ans && cached && (ans === cached.ch || ans === cached.prev)) this.markCookied(sender);
       else { this.stats.cookie++; this.stats.challenged++; this.ensureChallenge(sender);
         // Still run size/rate via underlying gate for the drop accounting, but force cookie refusal for pv>=1 strangers.
         const pre = this.gate.admit(msg, opts); if (!pre.ok && pre.reason !== 'stranger') return pre;

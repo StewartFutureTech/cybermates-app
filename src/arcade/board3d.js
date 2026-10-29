@@ -59,14 +59,15 @@ export async function board3d(canvas, { game = 'chess', onPick = () => {} } = {}
     for (const [, m] of free) shatter(m); meshes = next;
     hi.clear(); for (const i of highlight) { const [x, z] = sqPos(i); const h = new THREE.Mesh(new THREE.PlaneGeometry(.92, .92), hiMat); h.rotation.x = -Math.PI / 2; h.position.set(x, .012, z); hi.add(h); } }
   // --- camera orbit + tilt (smooth), pulse
-  let az = 0, tilt = 0.95, want = { az: 0, tilt: 0.95 }; const R = 10.5;
+  let az = 0, tilt = 0.95, want = { az: 0, tilt: 0.95 }; const R = 10.5; let idle = 0; const IDLE_S = 5; // cm-v35: idle spin resumes after 5 s (was: spun constantly, 0 s)
+  const halt = () => { idle = 0; want.az = az; }; for (const ev of ['pointerdown', 'touchstart']) addEventListener(ev, halt, { capture: true, passive: true }); // ANY touch stops it immediately
   canvas.addEventListener('pointerdown', e => { const x0 = e.clientX, y0 = e.clientY, a0 = want.az, t0 = want.tilt; let moved = false;
-    const mv = ev => { const dx = ev.clientX - x0, dy = ev.clientY - y0; if (Math.abs(dx) + Math.abs(dy) > 6) moved = true; want.az = a0 - dx * 0.008; want.tilt = Math.min(1.35, Math.max(0.45, t0 + dy * 0.006)); };
+    const mv = ev => { idle = 0; const dx = ev.clientX - x0, dy = ev.clientY - y0; if (Math.abs(dx) + Math.abs(dy) > 6) moved = true; want.az = a0 - dx * 0.008; want.tilt = Math.min(1.35, Math.max(0.45, t0 + dy * 0.006)); };
     const up = ev => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); if (!moved) pick(ev); }; addEventListener('pointermove', mv); addEventListener('pointerup', up); });
   const ray = new THREE.Raycaster(), v2 = new THREE.Vector2();
   function pick(ev) { const b = canvas.getBoundingClientRect(); v2.set(((ev.clientX - b.left) / b.width) * 2 - 1, -((ev.clientY - b.top) / b.height) * 2 + 1); ray.setFromCamera(v2, cam); const h = ray.intersectObject(plate)[0]; if (!h) return; const c = Math.floor(h.point.x + 4), r = Math.floor(h.point.z + 4); if (c >= 0 && c < 8 && r >= 0 && r < 8) onPick(r * 8 + c); }
   let last = performance.now();
-  S.onTick(t => { const dt = Math.min(0.05, (t - last) / 1000); last = t; if (!S.reduced) want.az += dt * 0.04; // slow idle orbit
+  S.onTick(t => { const dt = Math.min(0.05, (t - last) / 1000); last = t; idle += dt; if (!S.reduced && idle > IDLE_S) want.az += dt * 0.04; // slow idle orbit
     az += (want.az - az) * 0.08; tilt += (want.tilt - tilt) * 0.08; cam.position.set(Math.sin(az) * R * Math.cos(tilt), R * Math.sin(tilt), Math.cos(az) * R * Math.cos(tilt)); cam.lookAt(0, 0, 0);
     const p = S.reduced ? 0.85 : 0.65 + 0.35 * Math.sin(t / 1600); lm.opacity = p; for (const k of ['w', 'b']) RIM[k].uniforms.p.value = 0.7 + 0.3 * p;
     for (const tw of tweens) { tw.t = Math.min(1, tw.t + dt * (S.reduced ? 20 : 3.2)); const e = tw.t < .5 ? 2 * tw.t * tw.t : 1 - (-2 * tw.t + 2) ** 2 / 2; tw.m.position.lerpVectors(tw.from, tw.to, e); tw.m.position.y = Math.sin(e * Math.PI) * 0.6 * tw.from.distanceTo(tw.to) / 4; }

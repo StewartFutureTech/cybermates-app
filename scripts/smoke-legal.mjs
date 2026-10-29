@@ -25,18 +25,20 @@ assert(!/religion|orientation/.test(readFileSync(new URL('../src/voice-session.j
 await C.voiceConsent(v, 'free'); assert(await C.hasVoiceConsent(v, 'free') && !(await C.hasVoiceConsent(v, 'grok')), 'voice consent recorded per kind');
 assert(C.VOICE_DISCLOSURE_GROK.includes('AI') && C.VOICE_DISCLOSURE_GROK.includes('Zero Data Retention') && /voiceprint/.test(C.VOICE_DISCLOSURE_FREE), 'AI disclosure + ZDR + no voiceprint text');
 assert(main.includes("hasVoiceConsent(vv, 'free')") && main.includes("hasVoiceConsent(vv, 'grok')"), 'consent checked before mic and Grok session');
-assert(readFileSync(new URL('../api/voice-session.js', import.meta.url), 'utf8').includes('Zero Data Retention'), 'ZDR noted in voice-session stub');
+assert(readFileSync(new URL('../api/_fn/voice-session.js', import.meta.url), 'utf8').includes('Zero Data Retention'), 'ZDR noted in voice-session stub');
 const rep = C.buildReport({ reporter: 'AAAA', reported: 'BBBB', reason: 'harassment', excerpt: 'x'.repeat(5000) }); assert(rep.excerpt.length === 1000, 'report excerpt capped');
 let threw = false; try { C.buildReport({ reporter: 'a', reported: 'b', reason: 'nope' }); } catch { threw = true; } assert(threw, 'report reason validated');
 const q = await C.submitReport({ reporter: 'A', reported: 'B', reason: 'spam/scam' }, {}); assert(q.queued && JSON.parse(localStorage.getItem('cybermates:pending-reports')).length === 1, 'report queued without server');
-let sent; const r2 = await C.submitReport({ reporter: 'A', reported: 'B', reason: 'other' }, { VITE_SUPABASE_URL: 'https://x.supabase.co', VITE_SUPABASE_ANON_KEY: 'k' }, async (u, o) => { sent = { u, o }; return { ok: true, status: 201 }; });
-assert(r2.ok && sent.u.endsWith('/rest/v1/reports') && JSON.parse(sent.o.body).reported_code === 'B', 'report POSTs to reports table');
+let sent; const fake = { report: async o => { sent = o; return { id: 'r1', status: 'open' }; } }; const r2 = await C.submitReport({ reporter: 'A', reported: 'B', reason: 'other', excerpt: 'hi' }, { store: fake });
+assert(r2.ok && r2.id === 'r1' && sent.reason === 'other' && sent.reported === null && sent.evidence.reported_code === 'B' && sent.details === 'hi', 'report goes through store.report() (Supabase adapter)');
+const r3 = await C.submitReport({ reporter: 'A', reported: 'B', reason: 'other' }, { store: { report: async () => { throw Object.assign(new Error('x'), { code: '42501' }); } } }); assert(r3.queued && r3.error === '42501', 'store.report failure -> queued locally');
 const ui = readFileSync(new URL('../src/mesh-ui.js', import.meta.url), 'utf8'); assert(ui.includes('data-mreport') && ui.includes('id="mrep"'), 'report buttons on profiles + chats');
-assert(TERMS_VERSION === '2026-10-20.3' && !TERMS.join(' ').match(/48[ -]?h(ou)?r?s?\b|48h/i) && TERMS.join(' ').includes('Hide instantly, kept 7 days for safety reports') && TERMS.some(t => t.includes(C.SAFETY_CONTACT)), 'terms carry safety contact (re-prompt)');
+assert(TERMS_VERSION === '2026-10-28.1' && !TERMS.join(' ').match(/48[ -]?h(ou)?r?s?\b|48h/i) && TERMS.join(' ').includes('Hide instantly, kept 7 days for safety reports') && TERMS.some(t => t.includes(C.SAFETY_CONTACT)), 'terms carry safety contact (re-prompt)');
 assert(readFileSync(new URL('../docs/trust-safety.md', import.meta.url), 'utf8').includes('CyberTipline'), 'CSAM escalation doc');
 
 { const files = ['src/terms.js','src/help.js','src/mesh-ui.js','src/inbox-ui.js','src/settings-ui.js','src/compliance.js','docs/help-kb.md','README.md'];
   const bad = files.filter(f => /(48[ -]?h(ou)?rs?\b|48h)/i.test(readFileSync(new URL('../' + f, import.meta.url), 'utf8')));
   assert(bad.length === 0, 'no 48 hour clear/expire claim in user-facing text (' + bad.join(',') + ')');
   const all = TERMS.join(' ') + readFileSync(new URL('../docs/help-kb.md', import.meta.url), 'utf8');
+  assert(!TERMS.join(' ').includes('coming soon') && !readFileSync(new URL('../src/inbox-ui.js', import.meta.url), 'utf8').includes('Saving based on this choice is coming soon'), 'retention saving is live (no coming-soon copy)');
   assert(['Keep forever', 'Keep for a while, plus 7-day safety copy', 'Hide instantly, kept 7 days for safety reports', 'Under-18 chats will always be kept'].every(x => all.includes(x)), 'retention model: three bubbles + under-18 always kept'); }
