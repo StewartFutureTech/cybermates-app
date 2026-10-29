@@ -49,9 +49,9 @@ export function termsScreen(vault) {
     const fullText = [...d.querySelectorAll('.tm-card li')].map(e => e.textContent).join(' ');
     const gate = new AckGate({ minMs: ackMinMs(fullText) }), yes = d.querySelector('#tm-yes'), why = d.querySelector('#tm-why'), sc = d.querySelector('#tm-scroll');
     const stepsEl = d.querySelector('#tm-steps'), cd = d.querySelector('#tm-cd'), cdN = d.querySelector('#tm-cd-n'); let lastSteps = '';
-    const upd = () => { const ok = gate.canAccept(), left = gate.secs(); yes.disabled = !ok; why.textContent = gate.reason();
-      yes.textContent = left ? `Accept (${left}s)` : 'Accept'; cdN.textContent = left; cd.hidden = !left; cd.style.setProperty('--p', String(gate.minMs ? left * 1000 / gate.minMs : 0));
-      const html = gate.steps().map(x => `<li class="${x.done ? 'done' : ''}" data-step="${x.k}">${x.done ? '✓' : '○'} ${x.label}</li>`).join(''); if (html !== lastSteps) stepsEl.innerHTML = lastSteps = html;
+    const upd = () => { const ok = gate.canAccept(), left = gate.secs(); yes.disabled = !ok; why.textContent = gate.reason().replace(/\s*·?\s*\d+s$/, ''); /* v54 (David): the only countdown shown is on the Accept button */
+      yes.textContent = left ? `Accept (${left}s)` : 'Accept'; cdN.textContent = left; cd.hidden = true; /* v54: ring timer removed (redundant) */ cd.style.setProperty('--p', String(gate.minMs ? left * 1000 / gate.minMs : 0));
+      const html = gate.steps().filter(x => x.k !== 'timer').map(x => `<li class="${x.done ? 'done' : ''}" data-step="${x.k}">${x.done ? '✓' : '○'} ${x.label}</li>`).join(''); if (html !== lastSteps) stepsEl.innerHTML = lastSteps = html;
       if (ok) clearInterval(iv); };
     const iv = setInterval(() => { if (!d.isConnected) return clearInterval(iv); upd(); }, 250);
     sc.addEventListener('scroll', () => { gate.onScroll(sc); upd(); }, { passive: true }); gate.onScroll(sc);
