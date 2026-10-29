@@ -33,7 +33,7 @@ const seeds = {}; const seed = c => (seeds[c] ||= nacl.randomBytes(32));
 const host = async (c, { theme = 'cyan', roundT, minor = false } = {}) => { const m = new B.BrawlMatch({ id: 'brawl-' + c + '-1', humans: [{ name: c, local: true, seed: seed(c) }], roundT }); await m.ready();
   const t = new BN.BrawlTable({ match: m, code: c, me: { name: c, minor }, theme, mySeed: seed(c) }).claimSeat0(); await t.ready(); tables[c] = t;
   nodes[c] = BN.bindBrawl({ table: t, arcade: arcadeFor(c), code: c, secretKey: t.myKeys().secretKey, roster: { [c]: t.myPub() }, timers: T, now: () => now, termMs: 600e3 }); return nodes[c]; };
-const joiner = async (c, { theme = 'cyan', char = null, minor = false } = {}) => { boardFor(c); await step(2100); const tb = board[c].find('brawl', 'ffa6', minor ? 'minor' : 'adult'); if (!tb) return null;
+const joiner = async (c, { theme = 'cyan', char = null, minor = false } = {}) => { boardFor(c); await step(2100); const tb = board[c].find('brawl', 'ffa6', minor ? 'minor' : 'open'); if (!tb) return null;
   const kp = nacl.sign.keyPair.fromSeed(seed(c)), p = { code: c, name: c, minor, pub: b64(kp.publicKey), theme, char }; let r = null; BN.joinBrawl({ arcade: arcadeFor(c), table: tb, p, timers: T }).then(x => { r = x || 'refused'; });
   for (let i = 0; i < 40 && !r; i++) await step(33); if (!r || r === 'refused') return null;
   const m = new B.BrawlMatch({ id: tb.mid, chars: r.snap.g.f.map(x => B.ROSTER[x[0]].id), roundT: r.snap.g.rt }); await m.ready();
