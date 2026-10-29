@@ -57,8 +57,8 @@ const cs = [{ code: 'H', name: 'Host', pub: pub('H'), seat: 0, team: 0 }, { code
 const mH = new M.Match({ id: 'chess-1v1-3.H', game: 'chess', mode: '1v1', seats: cs }); bind('H', mH, { H: pub('H') });
 mH.receive(mH.makeMove(0, mH.mod.moves ? mH.mod.moves(mH.state)[0] : null, key('H').secretKey)); mH.aiMove(1); nodes.H.commit(); // mid-round
 const boardD = new N.TableBoard(() => now); arcadeFor('D').sub((f, b) => boardD.seen(f, b)); step(2500);
-const tbl = boardD.find('chess', '1v1', 'adult'); assert(tbl && tbl.mid === mH.id && tbl.open === 1 && tbl.from === 'H', 'host advertises the running table (1 AI seat open)');
-assert(!boardD.find('chess', '1v1', 'minor') && !boardD.find('checkers', '1v1', 'adult'), 'table not offered to another age band / game');
+const tbl = boardD.find('chess', '1v1', 'open'); assert(tbl && tbl.mid === mH.id && tbl.open === 1 && tbl.from === 'H', 'host advertises the running table (1 AI seat open)');
+assert(!boardD.find('chess', '1v1', 'minor') && !boardD.find('checkers', '1v1', 'open'), 'table not offered to another age band / game');
 const pD = { code: 'D', name: 'Dee', pub: pub('D'), age: 30 }; let rep = null; N.joinTable({ arcade: arcadeFor('D'), table: tbl, p: pD, timers: T }).then(x => { rep = x; }); step(500); await null; await null;
 assert(rep && rep.r.seated === 'next-round' && rep.snap.seq === mH.seq && rep.host === 'H', 'join ping -> host replies with seat (next round for turn-based) + live snapshot');
 const mD = new M.Match({ id: tbl.mid, game: 'chess', mode: '1v1', seats: rep.snap.seats }); mD.restoreAuth(rep.snap); bind('D', mD, rep.roster, { initial: rep });
@@ -77,7 +77,7 @@ assert(mD.round === mH.round && mD.seats.map(s => s.code).join() === mH.seats.ma
 nodes.D.leave(); down.add('D'); step(1000); assert(mH.seats.some(s => s.ai) && !mH.seats.some(s => s.code === 'D'), 'joiner left -> AI took the seat back');
 // ---------- 6) band separation: a minor cannot join an adult table
 down.delete('D'); const boardK = new N.TableBoard(() => now); arcadeFor('K').sub((f, b) => boardK.seen(f, b)); step(2500);
-let repK = 'x'; N.joinTable({ arcade: arcadeFor('K'), table: boardK.find('chess', '1v1', 'adult'), p: { code: 'K', name: 'Kid', minor: true, age: 15, pub: pub('K') }, timers: T }).then(x => { repK = x; }); step(500); await null; await null;
+let repK = 'x'; N.joinTable({ arcade: arcadeFor('K'), table: boardK.find('chess', '1v1', 'open'), p: { code: 'K', name: 'Kid', minor: true, age: 15, pub: pub('K') }, timers: T }).then(x => { repK = x; }); step(500); await null; await null;
 assert(repK === null && !mH.seats.some(s => s.code === 'K') && !(mH.pendingHumans || []).some(p => p.code === 'K'), 'minor refused at an adult table (and not queued)');
 // ---------- 7) JOIN MID-MATCH, real-time (Tron Duel 1v1: H2 + AI) -> seated NOW, AI hands over its live body
 for (const k of Object.keys(nodes)) { nodes[k].stop(); delete nodes[k]; } subs.clear(); wire.length = 0;
@@ -85,7 +85,7 @@ const ts3 = [{ code: 'H2', name: 'Host2', pub: pub('H2'), seat: 0, team: 0 }, { 
 const mR = new M.Match({ id: 'tronduel-1v1-4.H2', game: 'tronduel', mode: '1v1', seats: ts3 }); bind('H2', mR, { H2: pub('H2') }); for (let i = 0; i < 5; i++) mR.state.step();
 const body = mR.state.players.get('AI-9'), bx = body.x, by = body.y;
 const boardE = new N.TableBoard(() => now); arcadeFor('E').sub((f, b) => boardE.seen(f, b)); step(2500);
-let repE = null; N.joinTable({ arcade: arcadeFor('E'), table: boardE.find('tronduel', '1v1', 'adult'), p: { code: 'E', name: 'Eve', pub: pub('E'), age: 22 }, timers: T }).then(x => { repE = x; }); step(500); await null; await null;
+let repE = null; N.joinTable({ arcade: arcadeFor('E'), table: boardE.find('tronduel', '1v1', 'open'), p: { code: 'E', name: 'Eve', pub: pub('E'), age: 22 }, timers: T }).then(x => { repE = x; }); step(500); await null; await null;
 assert(repE?.r.seated === 'now' && mR.seats[1].code === 'E' && !mR.seats[1].ai, 'real-time join: seated immediately in the AI seat');
 const pe = mR.state.players.get('E'); assert(pe && !pe.bot && pe.x === bx && pe.y === by && !mR.state.players.has('AI-9'), 'AI stepped aside: joiner took over its live arena body (same spot, round continues)');
 assert(!('state' in repE.snap) && repE.snap.seats.length === 2, 'real-time snapshot ships seats/score only (lockstep arena never serialised)');

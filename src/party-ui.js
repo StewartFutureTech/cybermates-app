@@ -20,7 +20,7 @@ const say = t => { if (!prefs.caller || !audioState().sound) return; try { const
 export async function partyView(v, me, g, tabs = '') { stopParty();
   const myCode = mesh()?.code || 'ME', L = partyLobby(g, me), R = L.join(myCode, { name: me?.name || 'you', minor: isMinor(me), xage: xageOk(me), adult: !isMinor(me) }); joined = g;
   pv ||= new PartyVoice({ me, parent: isMinor(me) ? mesh()?.parent : null, isBlocked: c => !!mesh()?.blocklist?.isBlocked(c) });
-  const m = mesh(); m?.arcade?.listen((from, b) => { if (b.g !== g || !gameCompat(b, me)) return; // v56: cross-age only when both allow it const LL = partyLobby(g, me);
+  const m = mesh(); m?.arcade?.listen((from, b) => { if (b.g !== g || !gameCompat(b, me)) return; /* v56: cross-age only when both allow it */ const LL = partyLobby(g, me);
     if (b.op === 'join' && !LL.where.has(from)) LL.join(from, { name: b.name || from.slice(0, 6), minor: !!b.minor, xage: !!b.xage, adult: !b.minor }); if (b.op === 'leave') LL.leave(from);
     const W = LL.where.get(from); if (b.op === 'daub') W?.daub?.(from, b.i); if (b.op === 'claim') W?.claim?.(from); if (b.op === 'ans') W?.answer?.(from, b.q, b.a); if ('voice' in b) voiceOn.set(from, !!b.voice); });
   const send = o => m?.arcade?.send({ g, minor: isMinor(me), xage: xageOk(me), ...o }); send({ op: 'join', sub: R.id, name: me?.name, voice: pv.enabled });
