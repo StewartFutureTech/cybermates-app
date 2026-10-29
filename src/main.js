@@ -435,7 +435,8 @@ async function profile(v) {
     geocodeLocal(p); await db.upsertProfile(await withThumb(p)); toast('Saved ✓'); render();
   };
   v.append(T.lookPanel());
-  // v57: 'Peer network (beta)' section removed from Profile (David). Admin builds still show it in Dev.
+  // v57: 'Peer network (beta)' card removed from Profile (David); device linking + Advanced settings stay. Admin builds still show the card in Dev.
+  if (!ADMIN && st.me) { const pd = document.createElement('div'); v.append(pd); import('./settings-ui.js').then(S => S.settingsPanel(pd, st.me)).catch(e => console.warn('settings', e)); }
 }
 
 async function shop(v) {
