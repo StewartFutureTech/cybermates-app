@@ -8,6 +8,15 @@ import { isMinor } from '../discovery.js';
 export const VIEW_W = 32, VIEW_H = 24;
 export const RANGE = Math.hypot(VIEW_W / 2, VIEW_H / 2);
 export const band = p => (p?.minor || isMinor(p) || p?.adult === false ? 'minor' : 'adult');
+// v56 AGE RULES FOR GAMING (David): minors and adults may be matched/seated/spectate in GAMES by default; a parent can turn this off
+// in the minor's account (parent toggle 'crossAgeGaming', default ON). xage = the minor's packet flag "my parent allows cross-age
+// games" (old clients never send it => treated as OFF => same band only; fail closed). Adults are always open.
+// Friends, dating, Discover, Roulette, game TEXT chat and voice stay strictly band-separated (band() above, unchanged).
+let selfXage = null; export const setSelfXage = v => { selfXage = v === true; }; // this phone's parent setting (cached; null until loaded => closed)
+// packets/seats carry xage:boolean; MY profile object (has id, no xage) uses the cached parent setting.
+export const xageOk = p => band(p) === 'adult' || (typeof p?.xage === 'boolean' ? p.xage : (p?.id != null && selfXage === true));
+export const gband = p => (xageOk(p) ? 'open' : 'minor');            // game queue / table / lobby key
+export const gameCompat = (a, b) => band(a) === band(b) || (xageOk(a) && xageOk(b)); // may these two share a game?
 export function inView(a, b, size = Infinity) { const d = (u, v) => { let x = Math.abs(u - v); if (size !== Infinity) x = Math.min(x, size - x); return x; };
   return d(a.x, b.x) <= VIEW_W / 2 && d(a.y, b.y) <= VIEW_H / 2; }
 export function gainFor(a, b, size = Infinity) { if (!inView(a, b, size)) return 0; const dx = Math.min(Math.abs(a.x - b.x), size - Math.abs(a.x - b.x)), dy = Math.min(Math.abs(a.y - b.y), size - Math.abs(a.y - b.y)); return Math.max(0, 1 - Math.hypot(dx, dy) / RANGE); }

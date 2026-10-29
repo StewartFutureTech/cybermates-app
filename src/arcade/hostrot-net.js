@@ -9,7 +9,7 @@
 import nacl from 'tweetnacl';
 import { b64, unb64 } from '../vault.js';
 import { HostRotation, readBattery } from './host-rotation.js';
-import { band } from './proximity.js';
+import { band, gband, gameCompat } from './proximity.js';
 import { isRealtime } from './join-anytime.js';
 export const FLUSH_MS = 250;
 const LONG = { t: 't', q: 'seq', s: 'snap', e: 'epoch', h: 'host', f: 'from', m: 'metrics', p: 'prev' };
@@ -57,8 +57,8 @@ export function bindMatch({ match, arcade, code, secretKey, roster, now = () => 
   const bv = new BatchVerifier(c => rot.roster.get(c));
   const probes = [], rtts = new Map(); let pn = 0, lastProbe = -Infinity, lastAdv = -Infinity, lastBatt = -Infinity, closed = false;
   const commit = () => rot.isHost && rot.commit(match.snapshotAuth());
-  const humansOk = p => match.seats.filter(s => !s.ai).every(s => band(s) === band(p));
-  const advertise = () => { const open = match.seats.filter(s => s.ai).length; send({ op: 'tbl', g: match.game, mode: match.mode, band: band(match.seats.find(s => !s.ai) || match.seats[0]), open, host: code, epoch: rot.epoch, rt: isRealtime(match.game) ? 1 : 0 }); };
+  const humansOk = p => match.seats.filter(s => !s.ai).every(s => gameCompat(s, p));
+  const advertise = () => { const open = match.seats.filter(s => s.ai).length; send({ op: 'tbl', g: match.game, mode: match.mode, band: match.seats.filter(s => !s.ai).some(s => gband(s) === 'minor') ? 'minor' : gband(match.seats.find(s => !s.ai) || match.seats[0]), open, host: code, epoch: rot.epoch, rt: isRealtime(match.game) ? 1 : 0 }); };
   const onMsg = (from, b) => { if (closed || from === code) return; if (b?.op === 'tq' && rot.isHost && b.g === match.game && b.mode === match.mode && match.seats.some(s => s.ai)) { lastAdv = now(); return advertise(); } // 'who has a table?' -> advertise now
     if (b?.mid !== match.id) return;
     if (b.op === 'hr' && b.f === from) { const ms = bv.open(b); if (ms) for (const m of ms) { if (m.snap === undefined && m.t === 'hb') delete m.snap; rot.receive(m, { trusted: true }); } }
@@ -101,5 +101,5 @@ export function joinTable({ arcade, table, p, timeoutMs = 3000, timers = globalT
   unsub = arcade?.sub?.((from, b) => { if (b?.op === 'seat' && b.mid === table.mid && b.to === p.code && from === table.from) fin(b.r?.ok ? b : null); });
   h = timers.setTimeout?.(() => fin(null), timeoutMs); joinPing(arcade, table.mid, p); }); }
 export const tableQuery = (arcade, g, mode) => arcade?.send?.({ op: 'tq', g, mode });
-export const joinPing = (arcade, mid, p) => arcade?.send?.({ op: 'join', mid, p: { code: p.code, name: p.name, minor: !!p.minor, age: p.age, pub: p.pub } });
+export const joinPing = (arcade, mid, p) => arcade?.send?.({ op: 'join', mid, p: { code: p.code, name: p.name, minor: !!p.minor, xage: !!p.xage, age: p.age, pub: p.pub } });
 export { HostRotation };

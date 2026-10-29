@@ -22,6 +22,7 @@ import { BanList, decodeEntry } from './banlist.js';
 import { Outbox } from './outbox.js';
 import { DirectLink, canCall } from './call.js';
 import { ParentControls } from './parental.js';
+import { setSelfXage } from './arcade/proximity.js';
 import { getMood, setMood as setMoodMem, clearMood } from './mood.js';
 import { ConnCap } from './conncap.js';
 import { Cooldown, Roulette, receiverAccept, isAdult } from './roulette.js';
@@ -198,12 +199,12 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   // SINGLE ENTRY (api/_fn/bootstrap.js): the server super list is the ONLY way in. Halt / ban / US-only gate there. No cached-list
   // jump-start, no owner/master phone, no seed list, no phone snapshots. Server unreachable => no new entry.
   // The list is kept in memory only (member.active); it is never written to disk. Local dev bus: no server (dev only).
+  const myModes = () => DISC.myModes ? DISC.myModes(me) : (me.lookingFor || []); // v56: declared BEFORE presence('login') below (was after it => TDZ ReferenceError killed every server-path join)
   const local = !bus.kind.startsWith('supabase'), plan = startPlan({ lastOk: lastServerOk(), local });  changed('check-in', plan.why);
   if (!local && plan.pull) { onStatus('ENTERING VIA SERVER'); const att = await requestAttestation(id.code, { pub: id.keys.pub }).catch(() => ({ provider: 'none' })); const br = await gfetch('/api/bootstrap?code=' + encodeURIComponent(id.code) + (me.mode ? '&mode=' + encodeURIComponent(me.mode) : '') + (id.legacyCode ? '&legacy=' + encodeURIComponent(id.legacyCode) : ''), { headers: { 'x-cm-attest': btoa(JSON.stringify(att)) } }).catch(() => null); if (br?.status === 451) { const j = await br.json().catch(() => ({})); onStatus('US ONLY · NOT AVAILABLE HERE'); onNotice({ geo: true, notice: j.notice }); throw Object.assign(new Error('us-only'), { geo: true }); } if (!br || (!br.ok && ![403, 451, 503].includes(br.status))) { onStatus('SERVER UNREACHABLE · NO NEW ENTRY'); bus.close?.(); throw Object.assign(new Error('server-unreachable'), { offline: true }); }
   if (br?.ok) { recordServerOk(); br.clone?.().json?.().then(j => j?.geoWarning && onNotice({ warning: j.geoWarning, geo: true })).catch(() => {}); } if (br && (br.status === 403 || br.status === 503)) { const j = await br.json().catch(() => ({})), blk = { banned: br.status === 403 && !j.suspended, suspended: !!j.suspended, until: j.until, level: j.level, killed: br.status === 503, reason: j.reason }; if (br.status === 403) await applyServerBan({ vault: v, reason: blk.reason || (blk.suspended ? 'suspended' : 'banned'), until: blk.suspended ? blk.until : null, wipePeers }).catch(() => {}); bus.close?.(); onNotice(blk); throw Object.assign(new Error(blk.banned ? 'banned' : 'killed'), { blocked: blk }); } try { const r = await br.json(); if (Array.isArray(r.bans)) await member.mergeBans(r.bans.map(decodeEntry)); myAtt = !!r.attested; if (r.warning) onNotice({ warning: r.warning, level: r.level }); if (r.flags?.includes('unattested')) changed('bootstrap: ID unattested', att.provider); if (Array.isArray(r.list)) changed('server list', member.warmStart(r.list), 'rows (in memory only)'); } catch {}
     presence('login'); }
   onStatus('JOINING GOSSIP MESH'); await member.join(rv); node.ping(); onStatus('MESH JOINED · ' + member.active.size + ' NODES');
-  const myModes = () => DISC.myModes ? DISC.myModes(me) : (me.lookingFor || []);
   function presence(op) { if (local) return; const body = JSON.stringify({ op, code: id.code, legacy: id.legacyCode || undefined, row: member.row(member.shards[0], 'alive'), bind: op === 'login' || op === 'heartbeat' ? bindClaim : undefined, modes: myModes(), adult: !DISC.isMinor(me), card: { name: me.name, thumb: pub?.thumb || '', interests: (me.games || me.interests || []).slice(0, 6) } });
     if (op === 'logoff' && globalThis.navigator?.sendBeacon) { try { navigator.sendBeacon('/api/bootstrap', new Blob([body], { type: 'application/json' })); return; } catch {} }
     gfetch('/api/bootstrap', { method: 'POST', headers: { 'content-type': 'application/json' }, body }).then(async r => { if (r.status === 403 || r.status === 503 || r.status === 451) { const j = await r.json().catch(() => ({})); if (r.status === 403) applyServerBan({ vault: v, mesh: cur, wipePeers, onNotice, reason: j.reason, until: j.suspended ? j.until : null }); else onNotice(r.status === 451 ? { geo: true, notice: j.notice } : { killed: true, reason: j.reason }); }
@@ -262,6 +263,7 @@ export async function startMesh({ me, asKey = me.id, db, onChange = () => {}, bu
   };
   // persist friendship once the other side confirms
   const orig = node.on_fok.bind(node); node.on_fok = (f, b) => { orig(f, b); save(); };
+  try { setSelfXage(!DISC.isMinor(me) || await cur.parent.allowed('crossAgeGaming')); } catch { setSelfXage(false); } // v56 parent toggle (default ON)
   return cur;
 }
 globalThis.__cmMesh = mesh; // test hook (read-only access for E2E)

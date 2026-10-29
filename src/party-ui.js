@@ -3,7 +3,7 @@
 // keyed by age band so adults and minors never share a room. 3D-only (grid3d bingo card / trivia3d pads). Global party
 // voice (src/party/voice.js) = push-to-talk to the room, 10 s per minute budget, same-band only, parent rules apply.
 import { InstanceManager } from './arcade/instance.js';
-import { band } from './arcade/proximity.js';
+import { band, gband, gameCompat, xageOk } from './arcade/proximity.js';
 import { isMinor } from './discovery.js';
 import { mesh } from './app-mesh.js';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -13,17 +13,17 @@ import * as BG from './party/bingo.js';
 import * as MT from './party/mtrivia.js';
 import { PartyVoice } from './party/voice.js';
 const lobbies = {}; let timer = null, view3d = null, pv = null, joined = null; const voiceOn = new Map(); const prefs = { speed: 'fast', caller: true };
-export const partyLobby = (g, me) => { const k = g + '|' + band(me); return lobbies[k] ||= new InstanceManager({ gameName: g, cap: g === 'bingo' ? BG.ROOM_CAP : MT.ROOM_CAP, factory: id => g === 'bingo' ? new BG.BingoRoom({ id, speed: prefs.speed }) : new MT.TriviaRoom({ id }) }); };
+export const partyLobby = (g, me) => { const k = g + '|' + gband(me); return lobbies[k] ||= new InstanceManager({ gameName: g, cap: g === 'bingo' ? BG.ROOM_CAP : MT.ROOM_CAP, factory: id => g === 'bingo' ? new BG.BingoRoom({ id, speed: prefs.speed }) : new MT.TriviaRoom({ id }) }); };
 export const PARTY_GAMES = ['bingo', 'mtrivia'];
 export function stopParty() { clearInterval(timer); timer = null; view3d?.dispose?.(); view3d = null; pv?.stop(); pv?.closeAll(); rh?.stop(); rh = null; if (pv) pv.connect = null; const m = mesh(); if (joined && m) m.arcade?.send({ g: joined, op: 'leave' }); joined = null; try { speechSynthesis.cancel(); } catch {} }
 const say = t => { if (!prefs.caller || !audioState().sound) return; try { const u = new SpeechSynthesisUtterance(t); u.rate = 1.05; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch {} };
 export async function partyView(v, me, g, tabs = '') { stopParty();
-  const myCode = mesh()?.code || 'ME', L = partyLobby(g, me), R = L.join(myCode, { name: me?.name || 'you', minor: isMinor(me), adult: !isMinor(me) }); joined = g;
+  const myCode = mesh()?.code || 'ME', L = partyLobby(g, me), R = L.join(myCode, { name: me?.name || 'you', minor: isMinor(me), xage: xageOk(me), adult: !isMinor(me) }); joined = g;
   pv ||= new PartyVoice({ me, parent: isMinor(me) ? mesh()?.parent : null, isBlocked: c => !!mesh()?.blocklist?.isBlocked(c) });
-  const m = mesh(); m?.arcade?.listen((from, b) => { if (b.g !== g || band(b) !== band(me)) return; const LL = partyLobby(g, me);
-    if (b.op === 'join' && !LL.where.has(from)) LL.join(from, { name: b.name || from.slice(0, 6), minor: !!b.minor, adult: !b.minor }); if (b.op === 'leave') LL.leave(from);
+  const m = mesh(); m?.arcade?.listen((from, b) => { if (b.g !== g || !gameCompat(b, me)) return; // v56: cross-age only when both allow it const LL = partyLobby(g, me);
+    if (b.op === 'join' && !LL.where.has(from)) LL.join(from, { name: b.name || from.slice(0, 6), minor: !!b.minor, xage: !!b.xage, adult: !b.minor }); if (b.op === 'leave') LL.leave(from);
     const W = LL.where.get(from); if (b.op === 'daub') W?.daub?.(from, b.i); if (b.op === 'claim') W?.claim?.(from); if (b.op === 'ans') W?.answer?.(from, b.q, b.a); if ('voice' in b) voiceOn.set(from, !!b.voice); });
-  const send = o => m?.arcade?.send({ g, minor: isMinor(me), ...o }); send({ op: 'join', sub: R.id, name: me?.name, voice: pv.enabled });
+  const send = o => m?.arcade?.send({ g, minor: isMinor(me), xage: xageOk(me), ...o }); send({ op: 'join', sub: R.id, name: me?.name, voice: pv.enabled });
   v.innerHTML = `${tabs}<div class="card"><div class="row gap small" id="pt-status"></div>${g === 'bingo' ? `<div class="row gap small"><label>Caller speed <select id="bg-speed" style="width:auto"><option value="fast">every 10 s</option><option value="classic">every 1 min</option></select></label><label><input type="checkbox" id="bg-caller" style="width:auto" ${prefs.caller ? 'checked' : ''}> 🔊 Caller voice</label></div>` : ''}</div>
     <div class="arc-stage"><canvas id="pt-3d" class="arc-cv" style="width:100%;height:min(62vh,520px);touch-action:none"></canvas></div>
     ${g === 'bingo' ? '<div class="row gap"><button id="bg-claim" class="primary">BINGO!</button><span class="small" id="bg-msg"></span></div>' : '<div class="small" id="mt-msg"></div>'}

@@ -57,7 +57,7 @@ const POP = { games: ['Fortnite', 'Call of Duty', 'Minecraft', 'Valorant', 'Leag
 // Scripted onboarding flow. core = asked during setup; the rest is offered as "add more" from the review screen.
 const F = [
   { k: 'name', label: 'Display name', type: 'text', core: 1, ask: "Hey! I'm your Cybermates guide. What name should people see?", ph: 'e.g. Nova' },
-  { k: 'age', label: 'Age', type: 'number', core: 1, ask: 'How old are you? Under 18s get a safe minor mode without dating.' },
+  { k: 'age', label: 'Age', type: 'number', core: 1, ask: 'How old are you? Under 18s get a safe minor mode without dating: friends stay under-18 only; games can include 18+ players unless a parent turns that off.' },
   { k: 'lookingFor', label: 'What are you here for?', type: 'list', o: D.MODES, labels: D.MODE_LABEL, core: 1, ask: 'What are you here for? Friends, gaming, dating — pick as many as you like.' },
   { k: 'gender', label: 'Gender', type: 'one', o: D.GENDERS, core: 1, ask: 'What is your gender?' },
   { k: 'seekingGenders', label: 'Interested in dating', type: 'list', o: D.GENDERS, core: 1, when: dating, ask: 'Who are you interested in dating?' },
@@ -177,7 +177,8 @@ async function render() {
   if (st.me && !['onboard', 'arcade'].includes(st.tab)) SHOP.mountBanner(app, st.me).catch(() => {}); else SHOP.unmountBanner(); // bottom house-ad slot (hidden after Remove ads)
   T.wireHeader(app); app.querySelector('#parentbtn')?.addEventListener('click', () => IU.openParent());
   app.querySelectorAll('nav button').forEach(b => b.onclick = () => { st.tab = b.dataset.tab; st.chatWith = null; st.meshChat = null; render(); });
-  const v = $('#view'); if (st.tab !== 'arcade') stopArcade(); if (st.tab !== 'friends') FLUI.leave(); // friend link burns when its page closes if (st.tab === 'roulette' && !rouletteVisible(st.me)) st.tab = 'discover'; // 18+ only
+  const v = $('#view'); if (st.tab !== 'arcade') stopArcade(); if (st.tab !== 'friends') FLUI.leave(); // friend link burns when its page closes
+  if (st.tab === 'roulette' && !rouletteVisible(st.me)) st.tab = 'discover'; // 18+ only
   await ({ discover, friends: fv => { fv.innerHTML = FLUI.section(st) + IU.friendsSection(); IU.wireFriends(fv, st, render); FLUI.wire(fv, st, render); }, arcade: av => arcadeView(av, st.me), roulette: rv => rouletteView(rv, st.me), inbox, onboard, profile, shop: sv => SHOP.shopView(sv, st, render), help: hv => helpView(hv, st.me), ...(ADMIN ? { dev } : {}) })[st.tab]?.(v);
 }
 

@@ -13,7 +13,7 @@ import { can3D } from './arcade/three-scene.js';
 import nacl from 'tweetnacl';
 import * as BN from './arcade/brawl-net.js';
 import { TableBoard, tableQuery } from './arcade/hostrot-net.js';
-import { band } from './arcade/proximity.js';
+import { band, gband, xageOk } from './arcade/proximity.js';
 import { isMinor } from './discovery.js';
 import { mesh } from './app-mesh.js';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -48,7 +48,7 @@ async function start(v, me, pick, want3d, join = null) { stopBrawl();
   match = join ? new B.BrawlMatch({ id: join.mid, chars: join.snap.g.f.map(x => B.ROSTER[x[0]]?.id), roundT: join.snap.g.rt })
     : new B.BrawlMatch({ id: 'brawl-' + (me?.id || 'me') + '-' + Date.now(), humans: [{ name: me?.name || 'You', local: true, ...(arc ? { seed: mySeed } : {}) }], chars, roundT });
   const m = match; await m.ready(); if (match !== m) return; let T = null;
-  if (arc) { T = new BN.BrawlTable({ match: m, code, me: { name: me?.name || 'You', minor: isMinor(me), age: me?.age }, theme: myTheme, mySeed }); if (join) T.restoreAuth(join.snap); else T.claimSeat0(); await T.ready(); if (match !== m) return; }
+  if (arc) { T = new BN.BrawlTable({ match: m, code, me: { name: me?.name || 'You', minor: isMinor(me), xage: xageOk(me), age: me?.age }, theme: myTheme, mySeed }); if (join) T.restoreAuth(join.snap); else T.claimSeat0(); await T.ready(); if (match !== m) return; }
   const cv = v.querySelector('#br-cv'), c3 = v.querySelector('#br-3d-cv'), hud = v.querySelector('#br-hud'), say = v.querySelector('#br-say'), over = v.querySelector('#br-over'), tEl = v.querySelector('#br-time');
   const mySeat = () => T ? T.mySeat() : 0, act = a => net ? net.act(a) : m.act(0, a);
   const colorsNow = () => T ? seatColorsFor(m.seats.map(s => s.ai ? null : s.theme || null), myTheme) : seatColors(myTheme);
@@ -70,8 +70,8 @@ async function start(v, me, pick, want3d, join = null) { stopBrawl();
     net = BN.bindBrawl({ table: T, arcade: arc, code, secretKey: T.myKeys().secretKey, roster: join ? join.roster : { [code]: T.myPub() }, initial: join || null, onSeats });
     if (!join) { // JOIN-ANYTIME: drop into a running Brawl table in my age band (blocked players skipped); tie-break in BN.shouldJoin
       let joining = false; const tryJoin = async () => { if (match !== m || joining || !net?.soloHost()) return;
-        const t = board.find(BN.GAME, BN.MODE, band(me), { isBlocked: c => !!mesh()?.blocklist?.isBlocked(c), exclude: new Set([m.id]) }); if (!BN.shouldJoin(t, m.id)) return; joining = true;
-        const r = await BN.joinBrawl({ arcade: arc, table: t, p: { code, name: me?.name || 'You', minor: isMinor(me), age: me?.age, pub: T.myPub(), theme: myTheme, char: pick } }); joining = false;
+        const t = board.find(BN.GAME, BN.MODE, gband(me), { isBlocked: c => !!mesh()?.blocklist?.isBlocked(c), exclude: new Set([m.id]) }); if (!BN.shouldJoin(t, m.id)) return; joining = true;
+        const r = await BN.joinBrawl({ arcade: arc, table: t, p: { code, name: me?.name || 'You', minor: isMinor(me), xage: xageOk(me), age: me?.age, pub: T.myPub(), theme: myTheme, char: pick } }); joining = false;
         if (match !== m || !net?.soloHost()) return; if (!r) { board.t.delete(t.mid); return; } const w3 = !c3.hidden; for (const el of [cv, c3]) el.replaceWith(el.cloneNode(false)); // fresh canvases: never two WebGL stages on one canvas
         start(v, me, pick, w3, { ...r, mid: t.mid, seed: mySeed }); };
       tableQuery(arc, BN.GAME, BN.MODE); setTimeout(tryJoin, 700); scan = setInterval(tryJoin, 2000); } }

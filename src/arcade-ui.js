@@ -11,7 +11,7 @@ import { tron } from './arcade/tron.js';
 import { megaship, signShot, MAX_SHOTS, VISION } from './arcade/megaship.js';
 import nacl from 'tweetnacl';
 import { botLabel } from './arcade/bots.js';
-import { ProximityVoice, VIEW_W, VIEW_H, band } from './arcade/proximity.js';
+import { ProximityVoice, VIEW_W, VIEW_H, band, gband, gameCompat, xageOk } from './arcade/proximity.js';
 import * as FX from './arcade/fx.js';
 import * as DG from './arcade/games/drawguess.js';
 import { RoundChat } from './arcade/match.js';
@@ -30,7 +30,7 @@ globalThis.__cmProx = () => px && { enabled: px.enabled, inRange: [...px.inRange
 import { pttHTML, startVoice } from './voice-ui.js';
 let cur = { tab: new URLSearchParams(globalThis.location?.search || '').get('arcmode') || 'mass', game: new URLSearchParams(globalThis.location?.search || '').get('arcgame') || 'snake' }, t3 = null;
 // Draw & Guess rooms are split by AGE BAND (text chat between humans); snake/tron rooms are shared (no human text chat; proximity voice is band-gated).
-const lobby = (g, me) => { const k = g === 'drawguess' ? g + '|' + band(me) : g; return lobbies[k] ||= g === 'drawguess' ? new InstanceManager({ gameName: 'drawguess', factory: id => new DG.DrawRoom({ id }) }) : new InstanceManager({ game: GAMES[g], gameName: g }); };
+const lobby = (g, me) => { const k = g === 'drawguess' ? g + '|' + band(me) : g + '|' + gband(me); /* v56: shared rooms split only for minors whose parent turned cross-age games off */ return lobbies[k] ||= g === 'drawguess' ? new InstanceManager({ gameName: 'drawguess', factory: id => new DG.DrawRoom({ id }) }) : new InstanceManager({ game: GAMES[g], gameName: g }); };
 const remoteTheme = new Map(); // code -> theme id announced in 'arc' join
 export const themeHex = code => FX.themeAccent(remoteTheme.get(code) || THEMES[[...String(code)].reduce((a, c) => a + c.charCodeAt(0), 0) % THEMES.length][0]); // remote players' own theme (bots: pseudo-random theme)
 let stopMega = null; // set once megafleet-ui.js is loaded
@@ -52,18 +52,18 @@ function massView(v, me) {
   if (cur.game === 'megaship') { // v36 Mega Fleet: king-of-the-hill space arena (own sim + 3D view, bots fill) in megafleet-ui.js
     const tabs = `<div class="modes">${MASS_GAMES.map(([k, l]) => `<button data-game="${k}" class="${k === 'megaship' ? 'on' : ''}">${l}</button>`).join('')}</div>`;
     return import('./megafleet-ui.js').then(MF => { stopMega = MF.stopMegaFleet; if (!v.isConnected) return; MF.megaFleetView(v, me, { tabs }); v.querySelectorAll('[data-game]').forEach(b => b.onclick = () => { stopArcade(); cur.game = b.dataset.game; massView(v, me); }); }); }
-  const g = cur.game, L = lobby(g, me); const w = L.join(myCode, { name: me?.name || 'you', minor: isMinor(me), adult: !isMinor(me) }); cur.joined = true;
+  const g = cur.game, L = lobby(g, me); const w = L.join(myCode, { name: me?.name || 'you', minor: isMinor(me), xage: xageOk(me), adult: !isMinor(me) }); cur.joined = true;
   const m = mesh();
   // v51: reply-to-join + silence prune so newcomers see existing peers (and vice versa)
   ps?.stop(); ps = new PresenceSync({
     send: pkt => m?.arcade?.send({ g, ...pkt, theme: theme(), voice: px.enabled }),
     admit: (from, o) => { vPeers.set(from, { code: from, minor: !!o.minor }); if (!L.where.has(from)) return L.join(from, o); return L.where.get(from)?.players?.get?.(from) || null; },
     leave: c => { vPeers.delete(c); L.leave(c); },
-    me: () => ({ code: myCode, name: me?.name || 'you', minor: isMinor(me), sub: w.id, theme: theme(), voice: px.enabled }),
-    sameBand: b => g !== 'drawguess' || band(b) === band(me),
+    me: () => ({ code: myCode, name: me?.name || 'you', minor: isMinor(me), xage: xageOk(me), sub: w.id, theme: theme(), voice: px.enabled }),
+    sameBand: b => g === 'drawguess' ? band(b) === band(me) : gameCompat(b, me), // drawguess = free-text guesses => strict band
     isBlocked: c => !!m?.blocklist?.isBlocked(c),
   }).start();
-  m?.arcade?.listen((from, b) => { if (b.g !== cur.game) return; const LL = lobby(b.g, me); if (b.g === 'drawguess' && band(b) !== band(me)) return;
+  m?.arcade?.listen((from, b) => { if (b.g !== cur.game) return; const LL = lobby(b.g, me); if (b.g === 'drawguess' ? band(b) !== band(me) : !gameCompat(b, me)) return;
     if (b.theme) remoteTheme.set(from, b.theme);
     if (b.op === 'join') ps?.onPeer(from, b); else if (b.op === 'leave') { ps?.lastSeen.delete(from); LL.leave(from); }
     else { ps?.onActivity(from); if (b.op === 'in') LL.where.get(from)?.input?.(from, b.dir, b.tick); if (b.op === 'dg') LL.where.get(from)?.move(from, b.m); if (b.op === 'shot' && b.s?.code === from) { const W = LL.where.get(from); if (W && W.ownerAt(b.s.x, b.s.y) === myCode) megaship.receiveShot(W, b.s, () => b.pub); } if ('voice' in b) voiceOn.set(from, !!b.voice); } });
@@ -71,7 +71,7 @@ function massView(v, me) {
   const want3d = true; /* 3D-only (silent 2D fallback without WebGL) */ const shotKey = nacl.sign.keyPair(); let shotSeq = 0;
   const analog = !!GAMES[g]?.analog; // snake/tron: free steering — no on-screen ◀▲▼▶ pad
   const voiceCardHtml = `<div class="card"><div class="row gap"><label class="small"><input type="checkbox" id="arc-voice" style="width:auto" ${px.enabled ? 'checked' : ''}> 🎙 ${g === 'drawguess' ? 'Room voice' : 'Proximity voice'}</label>${g !== 'drawguess' ? `<label class="small"><input type="checkbox" id="arc-mutebots" style="width:auto" ${px.muteBots ? 'checked' : ''}> Mute bot chat</label>` : ''}</div>
-      ${pttHTML('arc-ptt')}<p class="muted small" id="arc-vnote">${isMinor(me) ? 'Voice needs a parent to turn it on (👪). You only ever hear players your own age group.' : 'Off until you turn it on. Adults and under-18s are never connected.'}</p></div>`;
+      ${pttHTML('arc-ptt')}<p class="muted small" id="arc-vnote">${isMinor(me) ? 'Voice needs a parent to turn it on (👪). You only ever hear players your own age group.' : 'Off until you turn it on. Adults and under-18s are never connected by voice.'}</p></div>`;
   v.innerHTML = `<div class="modes">${MASS_GAMES.map(([k, l]) => `<button data-game="${k}" class="${k === g ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div class="row gap small arc-veh">${g === 'tron' ? '<select id="arc-vehicle"><option value="bike">Light-cycle</option><option value="fighter">Star fighter</option></select>' : ''}${g === 'megaship' ? '<span class="muted">tap space to fire · shots recharge (max 10)</span>' : ''}</div>
     <div class="arc-stage"><canvas id="arc-cv" width="720" height="720" aria-label="${g} game"></canvas><canvas id="arc-3d-cv" class="arc-3d" hidden></canvas></div>

@@ -33,7 +33,7 @@ let sent; const fake = { report: async o => { sent = o; return { id: 'r1', statu
 assert(r2.ok && r2.id === 'r1' && sent.reason === 'other' && sent.reported === null && sent.evidence.reported_code === 'B' && sent.details === 'hi', 'report goes through store.report() (Supabase adapter)');
 const r3 = await C.submitReport({ reporter: 'A', reported: 'B', reason: 'other' }, { store: { report: async () => { throw Object.assign(new Error('x'), { code: '42501' }); } } }); assert(r3.queued && r3.error === '42501', 'store.report failure -> queued locally');
 const ui = readFileSync(new URL('../src/mesh-ui.js', import.meta.url), 'utf8'); assert(ui.includes('data-mreport') && ui.includes('id="mrep"'), 'report buttons on profiles + chats');
-assert(TERMS_VERSION === '2026-10-28.1' && !TERMS.join(' ').match(/48[ -]?h(ou)?r?s?\b|48h/i) && TERMS.join(' ').includes('Hide instantly, kept 7 days for safety reports') && TERMS.some(t => t.includes(C.SAFETY_CONTACT)), 'terms carry safety contact (re-prompt)');
+assert(TERMS_VERSION === '2026-10-29.1' && !TERMS.join(' ').match(/48[ -]?h(ou)?r?s?\b|48h/i) && TERMS.join(' ').includes('Hide instantly, kept 7 days for safety reports') && TERMS.some(t => t.includes(C.SAFETY_CONTACT)), 'terms carry safety contact (re-prompt)');
 assert(readFileSync(new URL('../docs/trust-safety.md', import.meta.url), 'utf8').includes('CyberTipline'), 'CSAM escalation doc');
 
 { const files = ['src/terms.js','src/help.js','src/mesh-ui.js','src/inbox-ui.js','src/settings-ui.js','src/compliance.js','docs/help-kb.md','README.md'];

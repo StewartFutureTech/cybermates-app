@@ -19,7 +19,7 @@ export class PresenceSync {
   stop() { if (this.pruneT) this.timers.clearInterval?.(this.pruneT); this.pruneT = null; for (const t of this.pending.values()) this.timers.clearTimeout?.(t); this.pending.clear(); }
   touch(code, at = this.now()) { if (code) this.lastSeen.set(code, at); }
   announce({ hello = false } = {}) { const m = this.me?.(); if (!m?.code) return null;
-    const pkt = { op: 'join', sub: m.sub, name: m.name, minor: !!m.minor, voice: !!m.voice, theme: m.theme, ...(hello ? { hello: 1 } : {}) };
+    const pkt = { op: 'join', sub: m.sub, name: m.name, minor: !!m.minor, xage: !!m.xage, voice: !!m.voice, theme: m.theme, ...(hello ? { hello: 1 } : {}) };
     this.send?.(pkt); return pkt; }
   // Inbound join/hello from `from`. Returns {action:'admit'|'reply'|'skip', ...}.
   onPeer(from, b = {}) {
@@ -28,7 +28,7 @@ export class PresenceSync {
     if (!this.sameBand(b)) { this.stats.skipped++; return { action: 'skip', reason: 'band' }; }
     this.touch(from); const hello = !!b.hello;
     if (hello) this.stats.hellos++; else this.stats.joins++;
-    const p = this.admit?.(from, { name: b.name || from.slice(0, 6), minor: !!b.minor, adult: !b.minor });
+    const p = this.admit?.(from, { name: b.name || from.slice(0, 6), minor: !!b.minor, xage: !!b.xage, adult: !b.minor });
     // Reply only to a plain join (not a hello reply) so we don't ping-pong. Stagger avoids a herd when many are on the map.
     if (!hello && !this.pending.has(from)) {
       const wait = staggerMs(this.rng);

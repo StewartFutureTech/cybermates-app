@@ -11,7 +11,7 @@ import * as FX from './arcade/fx.js';
 import { TICK_MS, mulberry32 } from './arcade/engine.js';
 import { cellAt, normFromClient, utttMove } from './arcade/pick.js';
 import { botLabel } from './arcade/bots.js';
-import { band } from './arcade/proximity.js';
+import { band, gband, xageOk } from './arcade/proximity.js';
 import { roundResult } from './arcade/games/duel.js';
 import { isMinor } from './discovery.js';
 import { mesh } from './app-mesh.js';
@@ -44,13 +44,13 @@ export function matchView(v, me, mode) {
   const auto = q.get('arcgame'); if (auto && list.some(g => g.id === auto.replace(/@3d$/, ''))) go(auto);
 }
 function start(v, me, mode, gid, asked = false) { stopMatch(); const k = nacl.sign.keyPair(), code = mesh()?.code || 'ME';
-  const arc = ensureBoard(), find = () => arc && board.find(gid, mode, band(me), { isBlocked: c => !!mesh()?.blocklist?.isBlocked(c) }); let t = find();
+  const arc = ensureBoard(), find = () => arc && board.find(gid, mode, gband(me), { isBlocked: c => !!mesh()?.blocklist?.isBlocked(c) }); let t = find();
   if (!t && arc && !asked) { tableQuery(arc, gid, mode); v.innerHTML = '<p class="muted small">Looking for a table…</p>'; return setTimeout(() => v.isConnected && start(v, me, mode, gid, true), 700); } // running tables answer at once
-  if (t) { const p = { code, name: me?.name || 'you', minor: isMinor(me), age: me?.age, pub: b64(k.publicKey) }; v.innerHTML = `<p class="muted small">Joining a ${esc(GAMES[gid]?.name || gid)} table in progress…</p>`;
+  if (t) { const p = { code, name: me?.name || 'you', minor: isMinor(me), xage: xageOk(me), age: me?.age, pub: b64(k.publicKey) }; v.innerHTML = `<p class="muted small">Joining a ${esc(GAMES[gid]?.name || gid)} table in progress…</p>`;
     joinTable({ arcade: arc, table: t, p }).then(r => { if (!v.isConnected) return; if (!r) { board.t.delete(t.mid); return start(v, me, mode, gid, true); } // refused / no answer -> own table
       const M = new Match({ id: t.mid, game: gid, mode, seats: r.snap.seats }); M.restoreAuth(r.snap); play(v, me, M, k.secretKey, code, { roster: r.roster, initial: r }); }); return; }
-  const r = mm.tryForm(mm.key(gid, mode, me), gid, mode) || (mm.enqueue({ code, name: me?.name || 'you', minor: isMinor(me), age: me?.age, pub: b64(k.publicKey), timer: q.get('timer') === '1' }, gid, mode), mm.tryForm(mm.key(gid, mode, me), gid, mode, true)); // local: fill now (mesh queue: see README)
-  const M = r.match; mesh()?.arcade?.send({ op: 'mq', g: gid, mode, band: band(me) }); play(v, me, M, k.secretKey, code); }
+  const r = mm.tryForm(mm.key(gid, mode, me), gid, mode) || (mm.enqueue({ code, name: me?.name || 'you', minor: isMinor(me), xage: xageOk(me), age: me?.age, pub: b64(k.publicKey), timer: q.get('timer') === '1' }, gid, mode), mm.tryForm(mm.key(gid, mode, me), gid, mode, true)); // local: fill now (mesh queue: see README)
+  const M = r.match; mesh()?.arcade?.send({ op: 'mq', g: gid, mode, band: gband(me) }); play(v, me, M, k.secretKey, code); }
 function play(v, me, M, sec, code, net = null) { stopMatch(M); const g = M.g, mySeat = () => M.seats.findIndex(s => s.code === code), P = FX.palette();
   // v55: the renderer variant is pinned to THIS match, so every mesh-driven rebuild (live join, next-round seating from the
   // host, rematch, host hand-off) keeps the original-name 3D look; the networking below is identical for both variants.

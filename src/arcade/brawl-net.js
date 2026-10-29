@@ -82,7 +82,7 @@ export function decodeInto(st, s) { st.tick = s.k; st.roundT = int(s.rt) || st.r
 // ---- the Match-shaped adapter bindMatch (hostrot-net.js) drives: seats, join/leave, auth snapshot/restore, rematch.
 export class BrawlTable {
   constructor({ match, code, me = {}, theme = null, mySeed = null }) { Object.assign(this, { m: match, code, mySeed, game: GAME, mode: MODE }); this.myTheme = okTheme(theme);
-    this.me = { name: clip(me.name) || 'You', minor: !!me.minor || (me.age != null && me.age !== '' && Number(me.age) < 18), age: me.age ?? null }; this.round = 0; this.pendingHumans = []; this.props = new Map(); this.pend = []; this.seen = new Set(); this.lastK = -1; this.aiWc = []; this.myWc = null; this.onSeats = null; this.onEvent = null; }
+    this.me = { name: clip(me.name) || 'You', minor: !!me.minor || (me.age != null && me.age !== '' && Number(me.age) < 18), xage: !!me.xage, age: me.age ?? null }; this.round = 0; this.pendingHumans = []; this.props = new Map(); this.pend = []; this.seen = new Set(); this.lastK = -1; this.aiWc = []; this.myWc = null; this.onSeats = null; this.onEvent = null; }
   get id() { return this.m.id; } get seats() { return this.m.seats; } get st() { return this.m.st; } get over() { return !!this.m.st.over; }
   mySeat() { return this.m.seats.findIndex(s => !s.ai && s.code === this.code); }
   myKeys() { return this.mySeed ? nacl.sign.keyPair.fromSeed(this.mySeed) : null; }
@@ -96,7 +96,7 @@ export class BrawlTable {
   _setAI(i) { const s = this.m.seats[i], seed = aiSeed(this.id, i), kp = nacl.sign.keyPair.fromSeed(seed);
     Object.assign(s, { seat: i, ai: true, code: undefined, minor: undefined, age: undefined, theme: undefined, name: rosterName(this.m.st.f[i].char), pub: b64(kp.publicKey), sk: kp.secretKey, seed, seq: 0, lastSeq: 0, local: true, skill: 0.5 + ((seed >> i) & 7) / 16 }); }
   _setHuman(i, p) { const s = this.m.seats[i], mine = p.code === this.code, kp = mine ? this.myKeys() : null, same = !s.ai && s.code === p.code;
-    Object.assign(s, { seat: i, ai: false, code: clip(p.code, 64), name: mine ? this.me.name : clip(p.name) || 'Player', minor: mine ? this.me.minor : !!p.minor, age: mine ? this.me.age : (p.age ?? null), theme: mine ? this.myTheme : okTheme(p.theme), pub: kp ? b64(kp.publicKey) : clip(p.pub, 64), sk: kp?.secretKey || null, seed: mine ? this.mySeed : null, local: mine, lastSeq: same ? s.lastSeq || 0 : 0, seq: same || mine ? s.seq || 0 : 0 }); }
+    Object.assign(s, { seat: i, ai: false, code: clip(p.code, 64), name: mine ? this.me.name : clip(p.name) || 'Player', minor: mine ? this.me.minor : !!p.minor, xage: mine ? !!this.me.xage : !!p.xage, age: mine ? this.me.age : (p.age ?? null), theme: mine ? this.myTheme : okTheme(p.theme), pub: kp ? b64(kp.publicKey) : clip(p.pub, 64), sk: kp?.secretKey || null, seed: mine ? this.mySeed : null, local: mine, lastSeq: same ? s.lastSeq || 0 : 0, seq: same || mine ? s.seq || 0 : 0 }); }
   _spawn(i, char) { const st = this.m.st, f = st.f[i]; // a joiner takes the AI's fighter as a fresh spawn (same rule as a respawn)
     if (CH.includes(char) && char !== f.char) { const j = st.f.findIndex(x => x.char === char); if (j >= 0 && this.m.seats[j].ai) { st.f[j].char = f.char; this.m.seats[j].name = rosterName(f.char); f.char = char; } }
     const [x, y] = B.SPAWNS[i]; Object.assign(f, { x, y, vx: 0, vy: 0, hp: B.HP, charge: 0, charging: false, shield: B.SPAWN_SHIELD, ko: 0, deaths: 0, lastHit: -1, fx: { k: 'spawn', t: st.tick } }); }
@@ -106,7 +106,7 @@ export class BrawlTable {
     const before = this.seatKey(); this._setHuman(i, p); this._spawn(i, p.char); this._changed(before); return { ok: true, seated: 'now', seat: i }; }
   leaveSeat(code) { const i = this.m.seats.findIndex(s => !s.ai && s.code === code); if (i < 0) return null; const before = this.seatKey(); this._setAI(i); this._changed(before); return i; } // AI takes over the fighter mid-round
   receive() { return { ok: false, reason: 'realtime' }; } // Brawl inputs use the 'bi' fast lane, not 'mv'
-  snapshotAuth() { return JSON.parse(JSON.stringify({ r: this.round, s: this.m.seats.map(s => s.ai ? { ai: 1 } : { code: s.code, name: s.name, minor: !!s.minor, age: s.age ?? null, theme: s.theme || null, pub: s.pub }), g: encode(this.m) })); }
+  snapshotAuth() { return JSON.parse(JSON.stringify({ r: this.round, s: this.m.seats.map(s => s.ai ? { ai: 1 } : { code: s.code, name: s.name, minor: !!s.minor, xage: !!s.xage, age: s.age ?? null, theme: s.theme || null, pub: s.pub }), g: encode(this.m) })); }
   restoreAuth(a) { if (!a || !Array.isArray(a.s) || a.s.length !== B.SEATS) return false; const before = this.seatKey(), newRound = Number.isInteger(a.r) && a.r !== this.round;
     if (newRound) this._newRound(a.r, a.g);
     a.s.forEach((x, i) => { const s = this.m.seats[i]; if (x?.ai) { if (!s.ai) this._setAI(i); } else if (x && typeof x.code === 'string' && typeof x.pub === 'string') { if (s.ai || s.code !== x.code || (x.code !== this.code && s.pub !== x.pub)) this._setHuman(i, x); else if (x.code !== this.code) Object.assign(s, { name: clip(x.name) || s.name, theme: okTheme(x.theme) }); } });
@@ -183,6 +183,6 @@ export function joinBrawl({ arcade, table, p, timeoutMs = 3000, timers = globalT
   const fin = v => { if (done) return; done = true; unsub?.(); if (h) timers.clearTimeout?.(h); res(v); };
   unsub = arcade?.sub?.((from, b) => { if (b?.op === 'seat' && b.mid === table.mid && b.to === p.code && from === table.from) fin(b.r?.ok && b.snap ? b : null); });
   h = timers.setTimeout?.(() => fin(null), timeoutMs);
-  arcade?.send?.({ op: 'join', mid: table.mid, p: { code: p.code, name: clip(p.name), minor: !!p.minor, age: p.age ?? null, pub: p.pub, theme: okTheme(p.theme), char: CH.includes(p.char) ? p.char : null } }); }); }
+  arcade?.send?.({ op: 'join', mid: table.mid, p: { code: p.code, name: clip(p.name), minor: !!p.minor, xage: !!p.xage, age: p.age ?? null, pub: p.pub, theme: okTheme(p.theme), char: CH.includes(p.char) ? p.char : null } }); }); }
 // join-anytime tie-break between two tables: join a table that already has other humans, or (both solo) the lower id.
 export const shouldJoin = (t, myId, seats = B.SEATS) => !!t && t.mid !== myId && (t.open < seats - 1 || t.mid < myId);

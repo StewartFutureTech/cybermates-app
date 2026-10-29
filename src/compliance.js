@@ -2,7 +2,7 @@ import { supabaseBackend, asUuid } from './kv-store.js';
 // Legal/safety features (per /workspace/legal-review/cybermates-review.md, items 3–6). Not legal advice; wording marked
 // PLACEHOLDER/UNVERIFIED must be replaced with counsel-approved / statutory text before launch.
 export const MIN_AGE = 18;
-export const SAFETY_CONTACT = 'safety@cybermates.example (PLACEHOLDER — publish a real monitored address before launch)';
+export const SAFETY_CONTACT = 'stewartfuturetech@gmail.com';
 // ---- 5. age gate ----
 export function ageFromDob(dob, now = new Date()) {
   const d = new Date(dob + 'T00:00:00'); if (!/^\d{4}-\d{2}-\d{2}$/.test(dob) || isNaN(d)) return null;
@@ -68,7 +68,7 @@ export async function submitReport(r, opts = {}) {
 export function ageGateScreen(vault) {
   return new Promise(res => {
     const d = document.createElement('div'); d.id = 'agegate'; d.className = 'cm-gate cm-onb'; d.style.cssText = 'position:fixed;inset:0;background:#000e;z-index:102;display:flex;align-items:center;justify-content:center;padding:16px';
-    d.innerHTML = `<div class="card" style="max-width:420px"><h3>🎂 When's your birthday?</h3><p class="small">We only keep an “adult / under 18” flag on this phone — not your birth date. Under 18: Dating and Roulette are not available, and you're only ever matched with other under-18s for voice.</p>
+    d.innerHTML = `<div class="card" style="max-width:420px"><h3>🎂 When's your birthday?</h3><p class="small">We only keep an “adult / under 18” flag on this phone — not your birth date. Under 18: Dating and Roulette are not available, and Friends and Discover only ever show other under-18s. Games can match you with 18+ players (game name and avatar only, no chat or voice across ages) unless a parent turns that off.</p>
       <input type="date" id="ag-dob" max="${new Date().toISOString().slice(0, 10)}"><p id="ag-err" class="small"></p>
       <p class="muted small">UK users: additional age assurance will be required before launch (placeholder).</p><button id="ag-go" class="primary">Continue</button></div>`;
     document.body.append(d); import('./rain-bg.js').then(m => m.attachRain(d)).catch(() => {});

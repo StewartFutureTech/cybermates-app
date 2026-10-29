@@ -14,15 +14,15 @@ export class InstanceManager {
     w.add(code, opts); w.fillBots(); this.where.set(code, w); }
   join(code, opts = {}) { if (this.where.has(code)) return this.where.get(code); const w = this.open(); this._place(w, code, opts); return w; }
   leave(code) { const w = this.where.get(code); if (!w) return; w.remove(code); this.where.delete(code); }
-  hop(code, id) { const to = this.list.find(w => w.id === id), from = this.where.get(code); if (!to || to === from || to.humans().length >= this.cap) return false; const p = from.players.get(code); this.leave(code); this._place(to, code, { name: p?.name, minor: p?.minor, adult: p?.adult }); return true; }
+  hop(code, id) { const to = this.list.find(w => w.id === id), from = this.where.get(code); if (!to || to === from || to.humans().length >= this.cap) return false; const p = from.players.get(code); this.leave(code); this._place(to, code, { name: p?.name, minor: p?.minor, xage: p?.xage, adult: p?.adult }); return true; }
   rebalance() { const humans = this.list.flatMap(w => w.humans().map(p => [w, p])); const k = Math.max(1, Math.ceil(humans.length / this.cap));
     while (this.list.length < k) this.create();
     const target = i => Math.floor(humans.length / k) + (i < humans.length % k ? 1 : 0); let moved = 0;
     const keep = this.list.slice().sort((a, b) => b.humans().length - a.humans().length).slice(0, k);
     for (const w of this.list) if (!keep.includes(w)) for (const p of w.humans()) { this.leave(p.code); this._move(p, keep); moved++; }
     for (;;) { const sorted = keep.slice().sort((a, b) => b.humans().length - a.humans().length), big = sorted[0], small = sorted[sorted.length - 1];
-      if (big.humans().length - small.humans().length <= 1) break; const p = big.humans().pop(); this.leave(p.code); this._place(small, p.code, { name: p.name, minor: p.minor, adult: p.adult }); moved++; }
+      if (big.humans().length - small.humans().length <= 1) break; const p = big.humans().pop(); this.leave(p.code); this._place(small, p.code, { name: p.name, minor: p.minor, xage: p.xage, adult: p.adult }); moved++; }
     this.list = this.list.filter(w => keep.includes(w)); this.relink(); return { moved, maps: this.list.length, sizes: this.list.map(w => w.humans().length), targets: keep.map((_, i) => target(i)) }; }
-  _move(p, keep) { const w = keep.slice().sort((a, b) => a.humans().length - b.humans().length)[0]; this._place(w, p.code, { name: p.name, minor: p.minor, adult: p.adult }); }
+  _move(p, keep) { const w = keep.slice().sort((a, b) => a.humans().length - b.humans().length)[0]; this._place(w, p.code, { name: p.name, minor: p.minor, xage: p.xage, adult: p.adult }); }
   stats() { return this.list.map(w => ({ id: w.id, humans: w.humans().length, bots: w.bots().length, total: w.players.size, links: [...w.links] })); }
 }

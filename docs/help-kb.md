@@ -79,5 +79,5 @@ keywords: theme color dark light pink blue green glow sound mute look
 Tap 🎨 in the header to cycle themes, or Profile → "Look & sound" to pick Neon Cyan, Synth Pink, Deep Blue, Acid Green or Light, toggle glow effects, and turn the boot sound on/off (off by default).
 
 ## Age requirement
-keywords: age 18 minimum underage teen
-You must be 18 or older. If you believe a user is under 18, report them with the reason "underage user".
+keywords: age 18 minimum underage teen minor parent games cross-age
+Dating and Roulette are 18+ only. Under-18 accounts (13–17) get friends, chat and games. Friends, Dating, Discover and Roulette are always kept separate by age: under-18 and 18+ accounts never see, match or friend each other there, because those age groups should not meet in person. In games (matchmaking, lobbies, spectating) under-18 and 18+ players can play together by default; only the game name and avatar are shown, and there is no chat, voice, DM or friend request across ages. A parent can turn cross-age games off in the under-18 account: 👪 Parent controls → "Games with 18+ players". If you believe someone lied about their age, report them with the reason "underage user".

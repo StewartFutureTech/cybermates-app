@@ -2,7 +2,7 @@
 // sent (field names 'pin', 'parentPin', 'pinHash' are on the never-send list). 5 wrong tries -> lockout with growing delay.
 // Toggles cover features; MESSAGING CAN NEVER BE DISABLED. Every change is logged locally for the parent.
 // Limits: a teen could change their birth date or switch devices; PIN recovery = reset that wipes parent settings.
-export const TOGGLES = { photos: 'Photos & images', videoCalls: 'Video calls', voiceCalls: 'Voice calls', discoverGaming: 'Gaming discovery', voiceSetup: 'Grok voice setup', proximityVoice: 'Arcade proximity voice' };
+export const TOGGLES = { photos: 'Photos & images', videoCalls: 'Video calls', voiceCalls: 'Voice calls', discoverGaming: 'Gaming discovery', voiceSetup: 'Grok voice setup', proximityVoice: 'Arcade proximity voice', crossAgeGaming: 'Games with 18+ players (matchmaking & lobbies only; no chat, friends or dating across ages)' };
 // Toggles that start OFF for minors (parent must enable them with the PIN; the change is logged like every other toggle).
 export const DEFAULT_OFF = []; // 2026-10-21 rule: every feature DEFAULT ON for minors; a parent turns specific ones off with the PIN
 export const ALWAYS_ON = ['messaging'];

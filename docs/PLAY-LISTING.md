@@ -32,7 +32,7 @@
 
 **Category:** Social. **Tags:** Social networking, Multiplayer, Friends, Dating (see age note).
 
-**Contact email:** **[DECIDE]**. The app currently shows a placeholder (`safety@cybermates.example`). A real, monitored address is required before submission.
+**Contact email:** stewartfuturetech@gmail.com (shown in the app's Terms, Help and report screens).
 **Privacy policy URL:** **[DECIDE]** Must be a public HTTPS page. Not created yet.
 **Website:** https://cybermates-stewart-future-tech.vercel.app
 

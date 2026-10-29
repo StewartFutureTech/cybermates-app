@@ -3,10 +3,10 @@ import { SAFETY_CONTACT, IDENTITY_NOTICE, ATTESTATION_NOTICE } from './complianc
 import { AckGate, ackMinMs } from './login-seq.js'; // UX §2: forced scroll to the end + 20-30 s minimum (sized to the read-aloud length) before Accept
 // First-launch Terms / README acknowledgement. Accepted version + timestamp are stored in the encrypted vault;
 // a new TERMS_VERSION re-prompts. The P2P consent dialog stays separate (shown when joining the peer network).
-export const TERMS_VERSION = '2026-10-28.1';
+export const TERMS_VERSION = '2026-10-29.1';
 export const DEVICE_BOUND_NOTICE = 'Boosts, starter packs and Grok voice minutes are tied to this device. If you transfer or re-sync to a new device, your profile, friends and settings move, but boost / starter / voice balances do NOT carry over: they reset to 0 on the new device and the old device is wiped. Subscriptions (Cybermates+) are tied to your account and are restored on the new device.';
 export const TERMS = [
-  'Cybermates is a beta app for meeting people for dating, friends and gaming. Dating and Roulette are 18+ only. Under-18 accounts get friends, chat and games, are only ever matched with other minors, and parents can turn features off with a PIN on the device.',
+  'Cybermates is a beta app for meeting people for dating, friends and gaming. Dating and Roulette are 18+ only. Friends, Dating, Discover and Roulette are always kept separate by age: under-18 and 18+ accounts never see, match or friend each other there, because those age groups should not meet in person. In games, under-18 and 18+ players can be matched and play together by default (only the game name and avatar are shown; no chat, voice, DMs or friend requests across ages); a parent can turn this off in the under-18 account with the 👪 Parent controls PIN, and can turn other features off too.',
   'Cybermates does NOT conduct criminal background checks or identity verification. Meet in public, never send money, and use Report / Block on any profile or chat. Safety contact: ' + SAFETY_CONTACT + '.',
   'Voice setup is optional and needs your separate consent: audio is transcribed and immediately discarded, never stored, and no voiceprint is created. The paid Grok voice option is an AI (xAI) and runs under xAI Zero Data Retention. Typed setup is always free.',
   'Religion and sexual orientation are optional, off by default, stay on this device only and are never sent to our servers, analytics or AI providers.',

@@ -4,7 +4,7 @@
 //  - TURN-BASED games (chess, checkers, connect4, battleship, uttt, trivia …): a waiting player pings the table and is
 //    queued; at the round boundary they are seated — replacing an AI auto-fill seat first, else an empty seat. Optional
 //    AI auto-fill keeps tables playable; the bot is replaced by the real player at the boundary (never mid-round).
-import { band } from './proximity.js';
+import { band, gameCompat } from './proximity.js';
 export const REALTIME = new Set(['snake', 'tron', 'tronduel', 'snakebattle', 'pong', 'megaship', 'brawl', 'duel']);
 export const isRealtime = game => REALTIME.has(game) || !!game?.realtime;
 export function joinRealtime(world, code, opts = {}) { const p = world.add(code, opts); p.alive = true; p.respawnAt = null; return p; }
@@ -16,7 +16,7 @@ export class TurnTable {
   // waiting player pings: seated now if the round has not started and a seat is free/bot; else queued for the boundary.
   ping(p) { if (this.seats.some(s => s?.code === p.code) || this.waiting.some(w => w.code === p.code)) return { ok: true, already: true };
     if (!this.inRound && this._seat(p)) return { ok: true, seated: true }; this.waiting.push(p); return { ok: true, queued: this.waiting.length }; }
-  _seat(p) { const humans = this.seats.filter(s => s && !s.ai); if (humans.length && humans.some(h => band(h) !== band(p))) return false; // never mix age bands
+  _seat(p) { const humans = this.seats.filter(s => s && !s.ai); if (humans.length && humans.some(h => !gameCompat(h, p))) return false; // v56: cross-age only when both sides allow it (parent toggle)
     let i = this.seats.findIndex(s => !s); if (i < 0) i = this.seats.findIndex(s => s?.ai); if (i < 0) return false; this.seats[i] = { ...p, seat: i }; return true; }
   leave(code) { this.waiting = this.waiting.filter(w => w.code !== code); const i = this.seats.findIndex(s => s?.code === code);
     if (i >= 0) this.seats[i] = this.inRound && this.autoFill ? { ...this.mkBot(++this.botN), seat: i } : null; } // bot takes over mid-round

@@ -1,6 +1,6 @@
 # Trust & Safety / Admin runbook (DRAFT — have counsel review before launch)
 
-Published safety contact: **safety@cybermates.example — PLACEHOLDER**, shown in Settings and Terms (`SAFETY_CONTACT` in `src/compliance.js`). Must be a real, monitored address (plus postal address where required) before launch.
+Published safety contact: **stewartfuturetech@gmail.com**, shown in Settings and Terms (`SAFETY_CONTACT` in `src/compliance.js`). Must be a real, monitored address (plus postal address where required) before launch.
 
 ## In-app tools
 - **Report** button on every live profile (Discover) and in every chat → row in Supabase `public.reports` (insert-only; reporter code, reported code, reason, optional ≤1000-char excerpt the reporter explicitly chose to attach). With no Supabase configured, reports queue in localStorage (`cybermates:pending-reports`) — NOT delivered.

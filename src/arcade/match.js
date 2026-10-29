@@ -14,7 +14,7 @@
 //  - Rematch: same seats, colours/sides swapped, fresh state; AI seats re-filled.
 import nacl from 'tweetnacl';
 import { b64, unb64 } from '../vault.js';
-import { band } from './proximity.js';
+import { band, gband, gameCompat } from './proximity.js';
 import * as chess from './games/chess.js';
 import * as checkers from './games/checkers.js';
 import * as connect4 from './games/connect4.js';
@@ -75,11 +75,11 @@ export class Match {
     mv ||= this.mod.ai(this.state, seat, rng); if (!mv) return null; return this.receive({ mid: this.id, seq: this.seq + 1, seat, move: mv, prev: this.head, sig: 'ai' }); }
   // Real players replace AI at the NEXT ROUND (matches never swap mid-round): queueHuman(p) then rematch()/newRound.
   queueHuman(p) { (this.pendingHumans ||= []).push(p); }
-  _swapIn() { for (const p of this.pendingHumans || []) { const i = this.seats.findIndex(s => s.ai && band(s) === band(p)); if (i >= 0) this.seats[i] = { ...p, seat: i, team: i % 2 }; } this.pendingHumans = []; }
+  _swapIn() { for (const p of this.pendingHumans || []) { const i = this.seats.findIndex(s => s.ai && this.seats.filter(h => !h.ai).every(h => gameCompat(h, p))); if (i >= 0) this.seats[i] = { ...p, seat: i, team: i % 2 }; } this.pendingHumans = []; }
   // JOIN-ANYTIME: real-time games seat the joiner NOW (takes over an AI seat in place, no protected round);
   // turn-based games queue the ping and seat at the round boundary (rematch/newRound), replacing an AI seat.
   join(p) { if (this.seats.some(s => s.code === p.code)) return { ok: true, already: true };
-    if (isRealtime(this.g.id)) { const i = this.seats.findIndex(s => s.ai && band(s) === band(p)); if (i < 0) return { ok: false, reason: 'full' };
+    if (isRealtime(this.g.id)) { if (!this.seats.filter(h => !h.ai).every(h => gameCompat(h, p))) return { ok: false, reason: 'band' }; const i = this.seats.findIndex(s => s.ai); if (i < 0) return { ok: false, reason: 'full' };
       this._reseat(i, p); return { ok: true, seated: 'now', seat: i }; }
     if (this.pendingHumans?.some(x => x.code === p.code)) return { ok: true, already: true, seated: 'next-round', queued: this.pendingHumans.length };
     this.queueHuman(p); return { ok: true, seated: 'next-round', queued: this.pendingHumans.length }; }
@@ -115,10 +115,10 @@ export class Hubs { constructor(cap = HUB_CAP) { this.cap = cap; this.list = [];
   leave(code) { this.of.get(code)?.members.delete(code); this.of.delete(code); } }
 export class Matchmaker {
   constructor({ isBlocked = () => false, isBanned = () => false, now = () => Date.now(), idTag = () => '' } = {}) { Object.assign(this, { isBlocked, isBanned, now, idTag }); this.q = new Map(); this.n = 0; this.matches = new Map(); this.hubs = new Hubs(); this.seeking = new Map(); this.invites = new Map(); }
-  key(game, mode, p) { const h = p?.code ? this.hubs.join(p.code).id : 'hub-1'; return `${game}|${mode}|${band(p)}|${h}`; }
+  key(game, mode, p) { const h = p?.code ? this.hubs.join(p.code).id : 'hub-1'; return `${game}|${mode}|${gband(p)}|${h}`; }
   _compat(a, b) { return !this.isBlocked(a.code, b.code) && !this.isBlocked(b.code, a.code) && !this.isBanned(a.code) && !this.isBanned(b.code); }
   enqueue(p, game, mode) { if (!GAMES[game]?.modes.includes(mode) || this.isBanned(p.code)) return { ok: false, reason: 'not-allowed' }; const k = this.key(game, mode, p); const q = this.q.get(k) || this.q.set(k, []).get(k);
-    if (!q.some(x => x.code === p.code)) q.push({ ...p, at: this.now(), status: 'searching' }); this.seeking.set(p.code, { game, mode, band: band(p), k, at: this.now() });
+    if (!q.some(x => x.code === p.code)) q.push({ ...p, at: this.now(), status: 'searching' }); this.seeking.set(p.code, { game, mode, band: gband(p), k, at: this.now() });
     return this.tryForm(k, game, mode) || { ok: true, queued: q.length, status: 'searching' }; }
   dequeue(code) { for (const [k, q] of this.q) this.q.set(k, q.filter(p => p.code !== code)); this.seeking.delete(code); const inv = this.invites.get(code); if (inv) this.invites.delete(code); this.hubs.leave(code); }
   // Build a compatible group from the queue (and optional extra seekers still in bot matches).
