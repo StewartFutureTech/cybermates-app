@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# v55: e2e-joinanytime (Flat) + e2e-joinanytime3d (original-name 3D games: live join NOW, bot replaced by the person at the next
+#      round, Join pop-up, mixed Flat<->3D table, sweep of every @3d game). Admin flavor needs .env.admin (VITE_ADMIN=1, gitignored).
 # v52: smoke-safety (Quiet safety number: pair fingerprint identical both orderings; verified clears on key change; no banner).
 # v51: smoke-v51 (PresenceSync reply-to-join + silence prune; Matchmaker BOT_START/INVITE; soft→hard mins + softClearsBoth;
 #      CookieGate/FloodReporter PROTO=1). Soft→hard Discover wired in livemesh/app-mesh/main. Preview only.
@@ -64,6 +66,8 @@ run e2e-csam node scripts/e2e-csam.mjs                                  # v45 CS
 run e2e-rtgate node scripts/e2e-rtgate.mjs                              # v46 Realtime join gate, LIVE Realtime (anon refused; signed-in part needs SUPA_TEST_USERS)
 run e2e-e2efs node scripts/e2e-e2efs.mjs                              # v47 forward secrecy + PAKE transfer, 2 real tabs
 run e2e-supafs node scripts/e2e-supafs.mjs                            # v48 FS + multi-device on the Supabase chat path, 5 real tabs (live part needs SUPA_TEST_USERS)
+run e2e-joinanytime node scripts/e2e-joinanytime.mjs                    # v36 join-anytime + host rotation (Flat), real tabs
+run e2e-joinanytime3d node scripts/e2e-joinanytime3d.mjs                # v55 same mesh join/matchmaking on the original-name 3D games
 run e2e-mdmesh node scripts/e2e-mdmesh.mjs                            # v49 multi-device delivery on the mesh path, 3 isolated phones (real v37 link)
 [ -x "${JAVA_HOME:-/home/box/jdk17}/bin/java" ] && run android bash scripts/android-check.sh
 [ $fail = 0 ] && echo "REGRESSION: ALL PASS" || echo "REGRESSION: FAILURES"; exit $fail
