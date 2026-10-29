@@ -31,6 +31,7 @@ const ensureBoard = () => { const a = mesh()?.arcade; if (a && a !== boardArc) {
 globalThis.addEventListener?.('pagehide', () => { hr?.leave(); hr = null; });
 export function stopMatch(keep) { clearInterval(loop); loop = null; if (!keep || hr?.match !== keep) { hr?.leave(); hr = null; } mv?.stop(); mv = null; view3d?.dispose?.(); view3d = null; }
 const q = new URLSearchParams(globalThis.location?.search || '');
+if (import.meta.env?.MODE === 'admin' || import.meta.env?.DEV) globalThis.__cmMM = () => mm; // v55 join-invite e2e hook (admin/dev builds only)
 export function matchView(v, me, mode) {
   const list = gamesFor(mode);
   // v54 (David): the v36 3D games come back under their ORIGINAL names ("<id>@3d"); the current versions stay, renamed "… Flat".
@@ -51,8 +52,11 @@ function start(v, me, mode, gid, asked = false) { stopMatch(); const k = nacl.si
   const r = mm.tryForm(mm.key(gid, mode, me), gid, mode) || (mm.enqueue({ code, name: me?.name || 'you', minor: isMinor(me), age: me?.age, pub: b64(k.publicKey), timer: q.get('timer') === '1' }, gid, mode), mm.tryForm(mm.key(gid, mode, me), gid, mode, true)); // local: fill now (mesh queue: see README)
   const M = r.match; mesh()?.arcade?.send({ op: 'mq', g: gid, mode, band: band(me) }); play(v, me, M, k.secretKey, code); }
 function play(v, me, M, sec, code, net = null) { stopMatch(M); const g = M.g, mySeat = () => M.seats.findIndex(s => s.code === code), P = FX.palette();
+  // v55: the renderer variant is pinned to THIS match, so every mesh-driven rebuild (live join, next-round seating from the
+  // host, rematch, host hand-off) keeps the original-name 3D look; the networking below is identical for both variants.
+  const view = M.view ||= variant;
   const use3d = !!THREE_D[g.id];
-  v.innerHTML = `<div class="match"><div class="row gap mhead"><button id="m-back" class="small">‹ Games</button><b class="grow">${esc(variant === 'v36' || !THREE_D[g.id] ? g.name : g.name + ' Flat')} · ${esc(M.mode)}</b></div><div id="m-status" class="small muted m-status" aria-live="polite"></div>
+  v.innerHTML = `<div class="match"><div class="row gap mhead"><button id="m-back" class="small">‹ Games</button><b class="grow">${esc(view === 'v36' || !THREE_D[g.id] ? g.name : g.name + ' Flat')} · ${esc(M.mode)}</b></div><div id="m-status" class="small muted m-status" aria-live="polite"></div>
     <div id="m-invite" class="card warn" hidden role="dialog" aria-live="assertive"><b>Join human match?</b> <span id="m-inv-txt"></span>
       <div class="row gap"><button id="m-inv-yes" class="primary">Accept</button><button id="m-inv-no" class="small">Decline</button><span class="muted small" id="m-inv-cd"></span></div></div>
     <div class="arc-stage"><canvas id="m-cv" width="720" height="720"></canvas><canvas id="m-3d-cv" class="arc-3d" hidden></canvas></div>
@@ -84,7 +88,7 @@ function play(v, me, M, sec, code, net = null) { stopMatch(M); const g = M.g, my
   if (!hr) { const roster = net?.roster || Object.fromEntries(M.seats.filter(s => !s.ai && s.pub).map(s => [s.code, s.pub])); if (!roster[code]) roster[code] = b64(nacl.sign.keyPair.fromSecretKey(sec).publicKey);
     hr = bindMatch({ match: M, arcade: mesh()?.arcade, code, secretKey: sec, roster, initial: net?.initial || null, onHost: (...a) => hooks.onHost?.(...a), onJoin: (...a) => hooks.onJoin?.(...a), onLeave: (...a) => hooks.onLeave?.(...a), onSync: (...a) => hooks.onSync?.(...a) }); }
   if (mySeat() < 0) msg = 'watching · you take a seat next round';
-  globalThis.__cmMatch = () => hr && { id: M.id, game: g.id, seats: M.seats.map(s => ({ code: s.code, ai: !!s.ai })), host: hr.rot.host, epoch: hr.rot.epoch, roster: [...hr.rot.roster.keys()], pending: (M.pendingHumans || []).map(p => p.code), round: M.round, seq: M.seq, head: M.head, me: code }; // read-only test/diagnostic view
+  globalThis.__cmMatch = () => hr && { id: M.id, game: g.id, view, seats: M.seats.map(s => ({ code: s.code, ai: !!s.ai })), host: hr.rot.host, epoch: hr.rot.epoch, roster: [...hr.rot.roster.keys()], pending: (M.pendingHumans || []).map(p => p.code), round: M.round, seq: M.seq, head: M.head, me: code }; // read-only test/diagnostic view
   M.joinPolicy = isRealtime(g.id) ? 'now' : 'next-round';
   const mine = () => M.mod.turnSeat?.(M.state) === mySeat();
   const doMove = mv => { const r = M.receive(M.makeMove(mySeat(), mv, sec)); if (!r.ok) msg = r.reason === 'illegal' ? 'Illegal move' : r.reason; else { msg = ''; mesh()?.arcade?.send({ op: 'mv', mid: M.id, sm: M.log[M.log.length - 1] }); hr?.commit(); } sel = null; return r.ok; };
@@ -92,7 +96,7 @@ function play(v, me, M, sec, code, net = null) { stopMatch(M); const g = M.g, my
   // ---- 3D views
   const try3d = async () => { if (!use3d) return; const S = await import('./arcade/three-scene.js'); if (!S.can3D()) { msg = '2D mode (3D needs WebGL2)'; S.noteFallback(cv.parentElement, globalThis.__cm3dDiag?.fallback || 'no WebGL2'); return; }
     c3.hidden = false; cv.hidden = true; c3.width = c3.clientWidth; c3.height = c3.clientHeight; const kind = THREE_D[g.id];
-    if (kind === 'board') { const B = variant === 'v36' ? await import('./arcade/board3d-v36.js') : await import('./arcade/board3d.js'); view3d = await B.board3d(c3, { game: g.id, onPick: sq => pickSq(sq) }); }
+    if (kind === 'board') { const B = view === 'v36' ? await import('./arcade/board3d-v36.js') : await import('./arcade/board3d.js'); view3d = await B.board3d(c3, { game: g.id, onPick: sq => pickSq(sq) }); }
     if (kind === 'c4') { const B = await import('./arcade/c4-3d.js'); view3d = await B.connect4_3d(c3, { onPick: col => mine() && doMove({ col }) }); }
     if (kind === 'paddle') { const B = await import('./arcade/paddle3d.js'); view3d = await B.paddle3d(c3, { style: localStorage.getItem('cm.arc.paddle') || (q.get('style') || 'airhockey') }); }
     if (kind === 'grid' && g.id === 'ttt') { const B = await import('./arcade/grid3d.js'); view3d = await B.grid3d(c3, { boards: [{ id: 't', n: 3, cx: 0, cz: 0, size: 6 }], R: 10, tilt: 1.1, onPick: (b, c) => { if (mine()) doMove({ k: c }); } }); }

@@ -24,5 +24,5 @@ const sql = fs.readdirSync('supabase/migrations').sort().map(p => fs.readFileSyn
 const tables = [...sql.matchAll(/create table (public\.\w+)/g)].map(m => m[1]);
 ok(tables.length >= 19, tables.length + ' tables in migrations');
 for (const t of tables) ok(sql.includes(`alter table ${t} enable row level security`) || new RegExp(`alter table ${t.replace('.', '\\.')} enable row level security`).test(sql) || sql.includes(`${t} enable row level security`), 'RLS on ' + t);
-ok(!/to anon/.test(sql), 'no policy/grant targets anon');
+ok(!/to anon/.test(sql.replace(/create policy (kill_switch_read on public\.kill_switch|app_config_read on public\.app_config) for select to anon, authenticated using \(true\)/g, '')), 'no policy/grant targets anon (except schema.sql public read of kill_switch/app_config)');
 console.log(f ? `supa-adapter: ${f} FAILED` : 'supa-adapter: all ok'); process.exit(f ? 1 : 0);

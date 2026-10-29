@@ -19,7 +19,7 @@ try {
   await p.$eval('#tm-scroll', e => { e.scrollTop = e.scrollHeight; e.dispatchEvent(new Event('scroll')); }); await sleep(300);
   ok(await p.$eval('#tm-yes', e => e.disabled) && /keep reading/.test(await p.$eval('#tm-why', e => e.textContent)), 'Accept still locked until the minimum time');
   { const cd = await p.evaluate(() => ({ hidden: document.querySelector('#tm-cd')?.hidden, n: document.querySelector('#tm-cd-n')?.textContent, steps: document.querySelectorAll('#tm-steps li').length, lbl: document.querySelector('#tm-yes').textContent, top: document.querySelector('#tm-read').getBoundingClientRect().top < document.querySelector('#tm-scroll').getBoundingClientRect().top }));
-    ok(cd.hidden === false && /^\d+$/.test(cd.n) && cd.steps === 3 && /Accept \(\d+s\)/.test(cd.lbl), 'visible countdown + 3-step checklist + "Accept (Ns)" label'); ok(cd.top, 'Read to me above the text'); }
+    ok(cd.hidden === true && /^\d+$/.test(cd.n) && cd.steps === 2 && /Accept \(\d+s\)/.test(cd.lbl), 'v54: ring timer hidden, 2-step checklist (no timer step), countdown only on "Accept (Ns)"'); ok(cd.top, 'Read to me above the text'); }
   await p.$eval('#tm-yes', e => { e.disabled = false; e.click(); }); await sleep(200); ok(!!(await p.$('#tm-scroll')), 'forcing the button enabled in devtools does not bypass the gate');
   await p.waitForFunction(() => !document.querySelector('#tm-yes').disabled, { timeout: 8000 }); ok(true, 'Accept unlocks after scroll + minimum'); await p.$eval('#tm-yes', e => e.click());
   if (await p.waitForSelector('#losswarn', { timeout: 6000 }).catch(() => null)) await p.$eval('#loss-ok', e => e.click());

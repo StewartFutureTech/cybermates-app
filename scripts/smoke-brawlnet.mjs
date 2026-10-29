@@ -73,7 +73,7 @@ const f0 = A.stats.inputsApplied, s0 = Bn.stats.inputsSent; for (let i = 0; i < 
 assert(Bn.stats.inputsSent - s0 <= BN.IN_RATE.burst + BN.IN_RATE.rate * 1.5 && A.stats.inputsApplied - f0 <= BN.IN_RATE.burst + BN.IN_RATE.rate * 1.5, `input flood capped (B sent ${Bn.stats.inputsSent - s0}, host applied ${A.stats.inputsApplied - f0} of 100)`);
 Bn.act({ op: 'release', x: 50, y: 50 }); await step(300);
 // ---------- 4) remote victim-signed hits
-for (const p of tables.A.st.f) p.shield = 0; const hA = tables.A.st.f[0], hBv = tables.A.st.f[1]; Object.assign(hBv, { x: 60, y: 60, vx: 0, vy: 0, hp: B.HP }); Object.assign(hA, { x: 68, y: 60, vx: 0, vy: 0 }); hA.punchCd = 0; tables.A.seats.forEach((s, i) => { if (s.ai) tables.A.st.f[i].shield = 99; });
+for (const p of tables.A.st.f) p.shield = 0; const hA = tables.A.st.f[0], hBv = tables.A.st.f[1]; Object.assign(hBv, { x: 60, y: 60, vx: 0, vy: 0, hp: B.HP }); Object.assign(hA, { x: 68, y: 60, vx: 0, vy: 0 }); hA.punchCd = 0; tables.A.seats.forEach((s, i) => { if (s.ai) Object.assign(tables.A.st.f[i], { shield: 99, x: 180 - (i % 2) * 170, y: 10 + (i % 3) * 50, vx: 0, vy: 0 }); }); // keep AIs away so the tap targets B (was flaky)
 const hp0 = hBv.hp, ha0 = A.stats.hitsApplied; A.act({ op: 'tap', x: hBv.x, y: hBv.y }); const prop = tables.A.st.pending.find(h => h.vic === 1);
 assert(prop && prop.kind === 'punch', 'host punches the remote human: hit only PROPOSED (needs B\'s signature)');
 await step(150); assert(hBv.hp === hp0 || A.stats.hitsApplied > ha0, 'not applied by the host on its own');
