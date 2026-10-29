@@ -33,6 +33,7 @@ import * as PH from './photos.js';
 import * as MV from './match-v2.js';
 import * as DV from './discover-view.js';
 import { profileComplete, missingProfile, ensureDeviceKey } from './login-seq.js';
+import * as PV from './profile-v57.js'; // v57 profile rework
 if (typeof document !== 'undefined' && document.body) FS.install(); else if (typeof document !== 'undefined') addEventListener('DOMContentLoaded', () => FS.install());
 T.applyLook(); T.initTypingGlow(); import('./fx-pointer.js').then(F => F.initPointerFx()); import('./sfx.js').then(S => S.initAudioUnlock()); import('./lasers.js').then(L => L.initLasers());
 // Dev/testing: ?as=<seedId> makes THIS TAB act as that demo user (not persisted), so several tabs can be different people.
@@ -95,19 +96,15 @@ function fieldHTML(f, v) {
   if (f.type === 'text') return `<input id="${id}" value="${esc(v)}">`;
   if (f.type === 'textarea') return `<textarea id="${id}" rows="3">${esc(v)}</textarea>`;
   if (f.type === 'number') return `<input id="${id}" type="number" value="${esc(v)}">`;
-  if (f.type === 'one') return `<div class="chips big" id="${id}">${f.o.map(o => `<label class="chip"><input type="radio" name="${id}" value="${esc(o)}" ${o === v ? 'checked' : ''}><span>${esc(o)}</span></label>`).join('')}</div>`;
+  if (f.type === 'one') return PV.oneWithAdd(id, f.o, [], v); // v57: 'Add something else' appends to the list
   if (f.type === 'list') {
-    const vals = v || []; const extra = vals.filter(x => !f.o.includes(x));
-    const first = f.pop ? [...new Set([...f.pop, ...vals.filter(x => f.o.includes(x))])] : f.o; const rest = f.o.filter(o => !first.includes(o));
-    const chip = o => `<label class="chip"><input type="checkbox" value="${esc(o)}" ${vals.includes(o) ? 'checked' : ''}><span>${esc(f.labels?.[o] || o)}</span></label>`;
-    return `<div class="chips big" id="${id}">${first.map(chip).join('')}${rest.length ? `<details class="more"><summary>More…</summary><div class="chips big">${rest.map(chip).join('')}</div></details>` : ''}</div>
-      ${f.labels ? `<input id="${id}_x" type="hidden" value="">` : `<input id="${id}_x" placeholder="Something else? (comma separated)" value="${esc(extra.join(', '))}">`}`;
+    if (f.labels) { const vals = v || []; return `<div class="chips big" id="${id}">${f.o.map(o => `<label class="chip"><input type="checkbox" value="${esc(o)}" ${vals.includes(o) ? 'checked' : ''}><span>${esc(f.labels[o] || o)}</span></label>`).join('')}</div>`; }
+    return PV.chipList(id, v || [], 'Type ' + f.label.toLowerCase().replace(/\?$/, '') + ' and tap Add'); // v57: no preset pick-lists, typed entries
   }
   if (f.type === 'handles') { const plats = f.k === 'gamertags' && st.draft?.platforms?.length ? [...new Set([...st.draft.platforms, ...Object.keys(v || {})])] : f.o;
     return `<div class="handles" id="${id}">${plats.map(o => `<label>${esc(o)}<input data-p="${esc(o)}" value="${esc(v?.[o] || '')}" placeholder="${o === 'Discord' ? 'username' : o === 'Riot' ? 'name#tag' : '@handle'}"></label>`).join('')}</div>${f.k === 'gamertags' && plats !== f.o ? '<p class="muted small">Showing the platforms you picked. Add others in Profile later.</p>' : ''}`; }
   if (f.type === 'range') return `<div class="row gap" id="${id}"><input type="number" min="18" max="99" data-r="0" value="${esc(v?.[0] ?? 18)}"><span>to</span><input type="number" min="18" max="99" data-r="1" value="${esc(v?.[1] ?? 40)}"></div>`;
-  if (f.type === 'location') return `<div id="${id}"><button type="button" class="primary wide" data-gps>📍 Use my location</button><p class="muted small center">or type it</p>
-    <input data-l="city" placeholder="City" value="${esc(v?.city)}"><input data-l="region" placeholder="State / region" value="${esc(v?.region)}"><input data-l="countryCode" placeholder="Country code (US, GB, JP…)" maxlength="2" value="${esc(v?.countryCode)}"></div>`;
+  if (f.type === 'location') return PV.locationHTML(id, v); // v57: GPS + City / State / Country dropdowns
   if (f.type === 'photos') { const ph = v || [];
     return `<div id="${id}"><div class="photos">${ph.map((u, i) => `<div class="ph"><img src="${u}" alt=""><button type="button" data-del="${i}">✕</button></div>`).join('')}<label class="ph add">＋<input type="file" accept="image/*" hidden></label></div>
       <p class="muted small" data-rolling hidden></p>${UX.presetsHTML((st.draft || st.me)?.avatarPreset)}
@@ -126,7 +123,7 @@ function readField(f, root = document) {
   if (f.type === 'range') { const a = [...el.querySelectorAll('input')].map(i => +i.value || null); return [Math.max(18, a[0] || 18), a[1] || 99]; }
   if (f.type === 'location') { const o = {}; el.querySelectorAll('[data-l]').forEach(i => o[i.dataset.l] = i.value.trim()); return o; }
   if (f.type === 'photos') return undefined; // photos save immediately on upload
-  if (f.type === 'list') return [...el.querySelectorAll('input:checked')].map(i => i.value).concat($('#' + id + '_x', root).value.split(',').map(s => s.trim()).filter(Boolean));
+  if (f.type === 'list') return el.matches('[data-tl]') ? PV.readChipList(el) : [...el.querySelectorAll('input:checked')].map(i => i.value);
   if (f.type === 'handles') { const o = {}; el.querySelectorAll('input').forEach(i => { if (i.value.trim()) o[i.dataset.p] = i.value.trim(); }); return o; }
   if (f.type === 'question') {
     const ans = el.querySelector('[data-r=answer]').value; if (ans === '') return undefined;
@@ -314,7 +311,10 @@ const show = (f, v) => { if (v == null || v === '' || (Array.isArray(v) && !v.fi
 
 // Downscale to ≤480px JPEG so photos fit in local storage.
 function toThumb(file) { return new Promise(res => { const img = new Image(); img.onload = () => { const k = Math.min(1, 480 / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = img.width * k; c.height = img.height * k; c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', 0.72)); URL.revokeObjectURL(img.src); }; img.src = URL.createObjectURL(file); }); }
+// v57: location dropdowns update in place (no re-render, unsaved edits stay)
+function wireLoc(root, p) { PV.wireLocation(root, o => { Object.assign(p, o); { const c = D.CITIES.find(c => c[0] === p.city && c[3] === p.countryCode); if (c) { p.lat = c[4]; p.lng = c[5]; } } geocodeLocal(p); const w = root.querySelector('[data-loc]'); if (!w) return; const host = w.parentElement; w.outerHTML = PV.locationHTML(w.id, p); wireLoc(host, p); host.querySelectorAll('[data-gps]').forEach(b => b.onclick = () => { b.textContent = '📍 Locating…'; locate(p).then(() => { const x = host.querySelector('[data-loc]'); x.outerHTML = PV.locationHTML(x.id, p); wireLoc(host, p); }, e => { b.textContent = '📍 ' + e; }); }); }); }
 function wireExtras(root, p, rerender) {
+  PV.wireLists(root); wireLoc(root, p);
   root.querySelector('input[type=file]')?.addEventListener('change', async e => { const f = e.target.files[0]; if (!f) return; const r = await PH.addPhoto(p, await toThumb(f)); if (r.notice) { st.rollingNotice = r.notice; toast('📸 ' + r.notice); } rerender(); });
   { const el = root.querySelector('[data-rolling]'); if (el) PH.allPhotos(p).then(all => { const extra = all.length - (p.photos || []).length; if (extra > 0) { el.hidden = false; el.textContent = `📸 ${(p.photos || []).length} shown + ${extra} more on this phone only. ${PH.ROLLING_NOTICE}`; } }).catch(() => {}); }
   root.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => { p.avatarPreset = b.dataset.preset; p.thumb = PH.presetURL(b.dataset.preset); rerender(); });
@@ -392,6 +392,18 @@ async function review(v, steps) {
   };
 }
 
+// v57 profile layout helpers
+const PROFILE_SKIP = new Set(['name', 'age', 'photos', 'discordInvite', 'religion', 'politics', 'drinking', 'smoking', 'kids', 'orientation', 'anime', 'teams']); // shown in the top card / categories / newer Matching rows
+function topCard(p) { const bd = p.birthday || C0.sessionBirthdate?.() || ''; const a = PV.ageFrom(bd) ?? p.age;
+  return `<div class="card" id="pf-top"><h4>👤 You</h4>${fieldHTML(F.find(f => f.k === 'photos'), p.photos)}
+    <label class="small">Display name <input id="f_name" value="${esc(p.name)}" maxlength="40"></label>
+    <label class="small">Birthday <input id="f_birthday" type="date" value="${esc(bd)}" max="${new Date().toISOString().slice(0, 10)}"></label> <span class="small" id="pf-age">${a != null ? 'Age ' + a : ''}</span>${PV.catControls('birthday', p)}</div>`; }
+function catCards(p) { const on = new Set(PV.activeCats(p));
+  return Object.entries(PV.CATS).map(([c, d]) => { const k = PV.catField(c), extra = c === 'sports' ? `<h4>Teams</h4>${fieldHTML(F.find(f => f.k === 'teams'), p.teams)}` : '';
+    return `<div class="card" data-cat="${c}" ${on.has(c) ? '' : 'hidden'}><h4>${d.label}</h4>${PV.chipList('f_' + k, p[k] || [], 'Add to ' + d.label.replace(/^\S+\s/, ''))}${extra}${PV.catControls(k, p)}</div>`; }).join(''); }
+function wireCats(v) { const upd = () => { const tmp = { interests: PV.readChipList(v.querySelector('#f_interests')) }; for (const c of Object.keys(PV.CATS)) tmp[PV.catField(c)] = PV.readChipList(v.querySelector('#f_' + PV.catField(c)));
+    const on = new Set(PV.activeCats(tmp)); v.querySelectorAll('[data-cat]').forEach(e => { e.hidden = !on.has(e.dataset.cat); }); };
+  v.addEventListener('tl-change', upd); const b = v.querySelector('#f_birthday'); if (b) b.oninput = () => { const a = PV.ageFrom(b.value); v.querySelector('#pf-age').textContent = a != null ? 'Age ' + a : ''; }; }
 async function profile(v) {
   const p = structuredClone(st.me);
   const accts = visibleAccounts(p, { isSelf: true });
@@ -399,14 +411,13 @@ async function profile(v) {
   v.innerHTML = IU.moodProfileCard() + `<div class="card"><div class="row">${avatar(p, 72, { self: true })}<div class="grow"><h2>${esc(p.name)} ${verified(p)}</h2><div class="muted small">📍 ${esc(p.location || 'No location yet')}</div><div class="row gap"><button type="button" id="geo">📍 Update location</button><button type="button" id="guided" class="ghost">✨ Guided edit</button></div></div></div></div>
   <div class="card verify"><b>✔ Get verified</b> <span class="tag">Coming soon</span><p class="muted small">Verified badges will mean a real-photo selfie check (AI liveness) and optional ID verification. Preview only — nothing is checked yet.</p></div>
   <form id="pf" novalidate>
-  <div class="card"><h4>🔒 Sensitive info (optional)</h4><label class="small"><input type="checkbox" id="sens-opt" ${p.sensitiveOptIn ? 'checked' : ''}> Let me add religion / orientation. Stored only on this phone; never sent to our servers, analytics or AI.</label><br><label class="small"><input type="checkbox" id="sens-show" ${p.showSensitive ? 'checked' : ''}> Show them on my own profile card (local only)</label>${C0.orientationRisk(p.countryCode) ? `<p class="warn small">⚠️ ${C0.ORIENTATION_WARNING}</p>` : ''}</div>
   <div class="card"><h4>📏 Distance per mode</h4>${D.MODES.map(m => `<div class="row gap"><b style="width:90px">${D.MODE_LABEL[m]}</b>${distControl(p, m)}</div>`).join('')}<p class="muted small">Defaults: Friends same state/region, Gaming global, Dating 50 mi (80 km outside US/UK). Both people's ranges must include each other.</p></div>
   <div class="card"><h4>🔒 Privacy: who sees each account</h4>${accts.map(a => `<div class="row gap"><span class="grow">${esc(a.platform)}: ${esc(a.handle)}</span>${lvl(a.kind + '.' + a.platform, a.level)}</div>`).join('') || '<p class="muted small">Add gamer tags / socials below first.</p>'}
     ${p.discordInvite ? `<div class="row gap"><span class="grow">Discord server invite</span>${lvl('discordInvite', p.reveal?.discordInvite || 'match')}</div>` : ''}</div>
-  ${F.filter(f => f.k !== 'ageRange' && (f.when === dating ? !DISC.isMinor(p) : !f.when || f.when(p))).map(f => `<div class="card"${f.when === dating ? ` data-dating-only${MV.datingOn(p) ? '' : ' hidden'}` : ''}><h4>${esc(f.label)}</h4>${fieldHTML(f, get(p, f.k))}</div>`).join('')}${UX.prefsCard(p)}${UX.favGamesHTML(p)}<button class="primary wide">Save profile</button></form>
+  ${topCard(p)}${F.filter(f => f.k !== 'ageRange' && !PROFILE_SKIP.has(f.k) && (f.when === dating ? !DISC.isMinor(p) : !f.when || f.when(p))).map(f => `<div class="card" data-fk="${esc(f.k)}"${f.when === dating ? ` data-dating-only${MV.datingOn(p) ? '' : ' hidden'}` : ''}><h4>${esc(f.label)}</h4>${fieldHTML(f, get(p, f.k))}${PV.catControls(f.k, p)}</div>${f.k === 'socials' ? PV.linksHTML(p) : ''}${f.k === 'interests' ? catCards(p) : ''}`).join('')}${UX.prefsCard(p)}${UX.favGamesHTML(p)}<button class="primary wide">Save profile</button></form>
   <div class="card"><button type="button" id="modq" class="ghost">⚑ Reports & moderation queue</button><div id="modq-v"></div></div>`;
   { const miss = missingProfile(st.me); if (miss.length) v.insertAdjacentHTML('afterbegin', `<div class="card warn" id="pf-required">Finish your profile to continue: <b>${miss.map(esc).join(', ')}</b></div>`); }
-  UX.wirePrefs(v); UX.wireFavGames(v, st.me, async () => { await db.upsertProfile(st.me); profile(v); });
+  UX.wirePrefs(v); wireCats(v); UX.wireFavGames(v, st.me, async () => { await db.upsertProfile(st.me); profile(v); });
   $('#modq').onclick = async () => { const R = await import('./reports.js'); R.modQueueView($('#modq-v'), { onBlock: c => mesh()?.block?.(c) }); };
   v.querySelectorAll('.distctl [data-d=scope]').forEach(sel => sel.onchange = () => sel.parentElement.querySelectorAll('[data-d=value],[data-d=unit]').forEach(x => x.style.display = sel.value === 'radius' ? '' : 'none'));
   $('#geo').onclick = () => locate(st.me).then(async me => { await db.upsertProfile(me); toast('Location saved: ' + me.location); render(); }, e => alert(e));
@@ -417,14 +428,14 @@ async function profile(v) {
     p.photos = st.me.photos || []; p.photoReveal = st.me.photoReveal || 'match'; if (p.lat !== st.me.lat) Object.assign(p, { lat: st.me.lat, lng: st.me.lng });
     p.reveal = { ...(p.reveal || {}) }; v.querySelectorAll('[data-rv]').forEach(s => p.reveal[s.dataset.rv] = s.value);
     p.distPrefs = { ...(p.distPrefs || {}), ...readDist(v) }; if (p.countryCode) p.countryCode = p.countryCode.toUpperCase().slice(0, 2);
-    p.sensitiveOptIn = !!$('#sens-opt')?.checked; p.showSensitive = p.sensitiveOptIn && !!$('#sens-show')?.checked;
-    if (p.sensitiveOptIn && !st.me.sensitiveOptIn && C0.orientationRisk(p.countryCode) && !confirm(C0.ORIENTATION_WARNING + '\n\nContinue anyway?')) p.sensitiveOptIn = p.showSensitive = false;
-    if (!p.sensitiveOptIn) { delete p.religion; delete p.orientation; }
+    { const bd = $('#f_birthday')?.value || ''; const a = PV.ageFrom(bd); if (bd && a != null) { if ((a < 18) !== DISC.isMinor(st.me)) { alert('That birthday changes your age group (under 18 / 18+). Age group changes are not allowed from the profile.'); return; } p.birthday = bd; p.age = a; } }
+    for (const c of Object.keys(PV.CATS)) if (c !== 'anime') { const el = v.querySelector('#f_' + PV.catKey(c)); if (el) p[PV.catKey(c)] = PV.readChipList(el); }
+    PV.routeInterests(p); PV.readCatControls(v, p); { const r = PV.readLinks(v, p); if (r.badInvites || r.badStreams) toast(`${r.badInvites + r.badStreams} link(s) skipped: use discord.gg/…, twitch.tv/… or kick.com/…`); }
     { const r = UX.readPrefs(v, p); if (r.droppedInterests) toast(`Interests are capped at ${MV.INTEREST_CAP} — ${r.droppedInterests} removed`); p.favGames = st.me.favGames || []; p.avatarPreset = st.me.avatarPreset; if (st.me.avatarPreset && !(st.me.photos || []).length) p.thumb = st.me.thumb; }
     geocodeLocal(p); await db.upsertProfile(await withThumb(p)); toast('Saved ✓'); render();
   };
   v.append(T.lookPanel());
-  if (!ADMIN && st.me) { const pd = document.createElement('div'); v.append(pd); p2pPanel(pd, st.me); } // peer network consent + settings (admin builds show these in Dev)
+  // v57: 'Peer network (beta)' section removed from Profile (David). Admin builds still show it in Dev.
 }
 
 async function shop(v) {

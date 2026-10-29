@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# v57: e2e-profile57 (profile rework per /workspace/v57-profile-spec.md; Peer network + Sensitive sections removed).
 # v56: smoke-v56 (lone-phone mesh join TDZ fix, friend-link connecting state, cross-age gaming default ON + parent toggle, strict friends/dating/chat/voice separation, age copy, safety contact).
 # v55: e2e-joinanytime (Flat) + e2e-joinanytime3d (original-name 3D games: live join NOW, bot replaced by the person at the next
 #      round, Join pop-up, mixed Flat<->3D table, sweep of every @3d game). Admin flavor needs .env.admin (VITE_ADMIN=1, gitignored).
@@ -70,5 +71,6 @@ run e2e-supafs node scripts/e2e-supafs.mjs                            # v48 FS +
 run e2e-joinanytime node scripts/e2e-joinanytime.mjs                    # v36 join-anytime + host rotation (Flat), real tabs
 run e2e-joinanytime3d node scripts/e2e-joinanytime3d.mjs                # v55 same mesh join/matchmaking on the original-name 3D games
 run e2e-mdmesh node scripts/e2e-mdmesh.mjs                            # v49 multi-device delivery on the mesh path, 3 isolated phones (real v37 link)
+run e2e-profile57 node scripts/e2e-profile57.mjs                        # v57 profile rework
 [ -x "${JAVA_HOME:-/home/box/jdk17}/bin/java" ] && run android bash scripts/android-check.sh
 [ $fail = 0 ] && echo "REGRESSION: ALL PASS" || echo "REGRESSION: FAILURES"; exit $fail
