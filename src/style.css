@@ -272,11 +272,11 @@ button,a,label,summary,[role=button],.chip,.card{-webkit-tap-highlight-color:tra
 .lg-word path{stroke-width:2.1}
 .lg-w1 path{stroke:var(--cy)}.lg-w2 path{stroke:var(--hot)}
 .lg-w1{filter:drop-shadow(0 0 3px color-mix(in srgb,var(--cy) 70%,transparent))}.lg-w2{filter:drop-shadow(0 0 3px color-mix(in srgb,var(--hot) 70%,transparent))}
-.lg-wtrail path{stroke:#fff;stroke-width:1.6;stroke-dasharray:.14 .86;stroke-dashoffset:1.14;opacity:.9;animation:lgWord 6s linear infinite;animation-delay:var(--syncd,0s)}
+.lg-wtrail path{stroke:#fff;stroke-width:1.6;stroke-dasharray:.14 .86;stroke-dashoffset:1.14;opacity:.9;animation:lgWord 3.3s linear infinite;animation-delay:var(--syncd,0s)}
 .lg-node2{animation:lgBlink 2.8s steps(1) infinite;animation-delay:var(--syncd,0s)}
 .lg{animation:lgGlitch 9s steps(1) infinite;animation-delay:var(--syncd,0s)}
 @keyframes lgRun{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
-@keyframes lgWord{0%{stroke-dashoffset:1.14}55%,100%{stroke-dashoffset:0}}
+@keyframes lgWord{from{stroke-dashoffset:1}to{stroke-dashoffset:0}} /* cm-v35: continuous loop, no pause (dash period = 1, so 1->0 is seamless) */
 @keyframes lgBlink{0%,100%{opacity:1}50%{opacity:.25}}
 @keyframes lgGlitch{0%,93%,100%{transform:none;opacity:1;filter:none}94%{transform:translateX(1.5px);filter:hue-rotate(60deg)}95%{transform:translateX(-1px) skewX(-6deg);opacity:.7}96%{transform:none;opacity:1}97%{transform:translateX(.8px);filter:hue-rotate(-40deg)}98%{transform:none}}
 /* intro: outline draws on behind a racing light head (first render only) */
@@ -326,3 +326,63 @@ html.lowfx .lg,html.lowfx .lg *{animation:none!important;stroke-dashoffset:0}htm
 .br-over{position:absolute;inset:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(6px);border:1px solid var(--cy);border-radius:10px}.br-board{font-family:var(--mono);font-size:12px;border-collapse:collapse}.br-board td,.br-board th{padding:2px 10px;text-align:left}.br-board tr.me{color:var(--cy)}
 @media (prefers-reduced-motion: reduce){.br-bar i{transition:none}}
 .br-over[hidden],.br-say:empty{display:none!important}
+/* ---- phone layout: no horizontal overflow (2026-10-21) — arcade mode tabs + game cards wrap into equal-width grids,
+   safe-area insets respected, bottom nav (8 tabs incl. Friends) fits at 320px */
+.arc-tabs{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(min(100%,78px),1fr));gap:6px;width:100%;max-width:100%;box-sizing:border-box;overflow:visible}
+.arc-tabs button{min-width:0;max-width:100%;box-sizing:border-box;white-space:normal;overflow-wrap:anywhere;letter-spacing:.6px;padding:9px 4px;font-size:clamp(10px,3.1vw,13px);line-height:1.2}
+.arc-games{grid-template-columns:repeat(2,minmax(0,1fr))}.arc-game{min-width:0;box-sizing:border-box;overflow-wrap:anywhere}
+.arc-veh,.arc-pad{flex-wrap:wrap;max-width:100%}.arc-veh select{max-width:100%;min-width:0}
+main{max-width:min(560px,100%);box-sizing:border-box;padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}
+#view .card,#view .row{max-width:100%;box-sizing:border-box;min-width:0}#view .row>*{min-width:0}
+nav{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+nav button{flex:1 1 0;min-width:0;overflow:hidden;font-size:clamp(7px,2.25vw,10px);letter-spacing:clamp(0px,.12vw,.5px);white-space:nowrap;text-overflow:clip}
+@media (max-width:360px){nav .nic{width:22px;height:22px}}
+.modal{box-sizing:border-box;max-width:100vw;overflow-x:hidden}.modal>.card{box-sizing:border-box;max-width:calc(100vw - 24px);min-width:0}
+#moodpick .row{flex-wrap:wrap}#moodpick .row>button{flex:1 1 auto;min-width:0}#moodpick select{max-width:100%;box-sizing:border-box}
+.modes{display:flex;flex-wrap:wrap;gap:6px;max-width:100%;box-sizing:border-box}.modes>button{flex:1 1 auto;min-width:0;max-width:100%;box-sizing:border-box;white-space:normal}
+.arc-stage{position:relative}.cm-fs-btn{position:absolute;top:12px;right:12px;z-index:3;width:38px;height:38px;padding:0;display:grid;place-items:center;font-size:20px;line-height:1;border-radius:10px;background:color-mix(in srgb,var(--bg) 70%,transparent);border:1px solid color-mix(in srgb,var(--cy) 55%,transparent);color:var(--cy)}
+#view:fullscreen,#view:-webkit-full-screen,.cm-immersive{position:fixed!important;inset:0;z-index:40;max-width:none!important;width:100%;height:100%;margin:0;overflow:auto;background:var(--bg);padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);box-sizing:border-box}
+#view:fullscreen .arc-stage canvas,.cm-immersive .arc-stage canvas{max-width:min(100%,calc(100dvh - 140px))}
+.pname{cursor:pointer;text-decoration:underline dotted color-mix(in srgb,var(--cy) 60%,transparent);text-underline-offset:3px}
+.pmenu{position:fixed;z-index:60;display:flex;flex-direction:column;gap:6px;min-width:160px;max-width:calc(100vw - 16px);padding:10px;border-radius:10px;background:var(--card,#0d1122);border:1px solid color-mix(in srgb,var(--cy) 55%,transparent);box-shadow:0 6px 24px #000a}
+.m-status{min-height:1.2em;margin:2px 0 0;text-align:center;font-family:var(--mono);letter-spacing:.5px}
+
+/* UX §2 acknowledgement: forced-scroll box (glass) */
+.tm-scroll{max-height:46vh;overflow:auto;padding:.4rem .8rem;border-radius:14px;background:linear-gradient(160deg,rgba(255,255,255,.10),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 10px 30px rgba(0,0,0,.35);backdrop-filter:blur(10px) saturate(1.4);-webkit-backdrop-filter:blur(10px) saturate(1.4)}
+.tm-actions{display:flex;gap:.6rem;align-items:center;justify-content:flex-end}
+/* Discover swipe deck: 3D glass card */
+.dv-toggle button.on{box-shadow:0 0 0 1px var(--cy,#16c6ff),0 0 14px var(--cy,#16c6ff)}
+.dv-stage{perspective:900px;display:flex;justify-content:center;padding:1rem 0}
+.dv-card{width:min(92vw,420px);transform-style:preserve-3d;touch-action:pan-y;cursor:grab;border-radius:20px;background:linear-gradient(150deg,rgba(255,255,255,.16),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.22);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 18px 40px rgba(0,0,0,.45);backdrop-filter:blur(14px) saturate(1.5);-webkit-backdrop-filter:blur(14px) saturate(1.5)}
+.dv-btns{justify-content:center}
+/* push-to-talk */
+.ptt.live{box-shadow:0 0 0 2px #ff2bd6,0 0 18px #ff2bd6}
+.ptt-meter{height:8px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden}.ptt-meter i{display:block;height:100%;background:linear-gradient(90deg,#16c6ff,#3dff9a);transition:width .2s}
+.mq-item.urgent{border-color:#ff3b5c;box-shadow:0 0 14px rgba(255,59,92,.4)}.mq-ex{white-space:pre-wrap;max-height:8em;overflow:auto}
+.glass3d{transform:translateZ(0)}
+.preset-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem}.preset-grid button{padding:.3rem;border-radius:16px}.preset-grid img{width:100%;aspect-ratio:1}
+.preset-grid button.on{box-shadow:0 0 0 2px var(--cy,#16c6ff),0 0 14px var(--cy,#16c6ff)}
+@media (prefers-reduced-motion:reduce){.dv-card{transition:none!important}}
+/* UX §2 acknowledgement: requirement checklist + visible countdown ring (static under reduced motion) */
+.tm-actions{flex-wrap:wrap}
+.tm-steps{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:.3rem .7rem;flex:1 1 100%}
+.tm-steps li{opacity:.75}.tm-steps li.done{opacity:1;color:var(--cy,#16c6ff)}
+.tm-cd{--p:1;position:relative;width:46px;height:46px;flex:0 0 46px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-variant-numeric:tabular-nums;
+  background:conic-gradient(var(--cy,#16c6ff) calc(var(--p)*360deg),rgba(255,255,255,.08) 0);box-shadow:0 0 12px color-mix(in srgb,var(--cy,#16c6ff) 45%,transparent);transition:background .25s linear}
+.tm-cd::before{content:'';position:absolute;inset:4px;border-radius:50%;background:var(--panel,#0b0f1a)}
+.tm-cd>*{position:relative}.tm-cd small{font-size:.65em;opacity:.7}.tm-cd[hidden]{display:none}
+.tm-actions #tm-why{flex:1 1 auto}.tm-actions button#tm-yes{width:auto;flex:1 1 140px}
+.tm-rm .tm-cd{transition:none;box-shadow:none}
+@media (prefers-reduced-motion:reduce){.tm-cd{transition:none}}
+/* cm-v33 matching prefs + Discover match bar (glass cards, theme tokens only) */
+.mode-prefs{margin:8px 0;padding:10px}.mode-prefs[hidden],[data-dating-only][hidden]{display:none!important}.mode-prefs input[type=number]{min-width:0}
+.mode-prefs .cmp .chip span{padding:6px 10px;font-size:13px}.pf-acc{margin-top:6px}.pf-acc .chip{font-size:13px}
+.matchbar .gfilter{margin-top:6px}.matchbar .chip{padding:5px 10px;font-size:13px}
+
+/* cm-v35: Jack-in logo gets the same running outer-edge glow (lg-trail lgRun) as the header logo after login, looping forever after the intro */
+.jb-box .lg-intro .lg-trail{animation:lgRun .9s linear 2 both,lgRun 4.2s linear 1.8s infinite}
+.jb-box .lg-mark{filter:drop-shadow(0 0 3px var(--cy)) drop-shadow(0 0 8px color-mix(in srgb,var(--cy) 45%,transparent)) drop-shadow(0 0 18px color-mix(in srgb,var(--cy) 45%,transparent))}
+/* cm-v35: no text selection / iOS callout / tap flash on press-and-hold anywhere in a game (chat + inputs stay selectable) */
+.arc-stage,.arc-stage *,.arc-pad,.arc-pad *,.arc-3d,.br-stage,.br-stage *,[class^="br-"],.arc-players,.cm-fs-btn,#view:fullscreen .arc-stage{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+.arc-stage canvas,.br-stage canvas,.arc-pad button{touch-action:none}
+.arc-stage input,.arc-stage textarea,.arc-stage [contenteditable],.br-stage input,.br-stage textarea,.br-say,.br-say *{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}

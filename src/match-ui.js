@@ -23,6 +23,7 @@ import { pttHTML } from './voice-ui.js';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ICON = { chess: '♞', checkers: '⛀', connect4: '◉', battleship: '⚓', uttt: '#', ttt: '✕', tronduel: '🏍', snakebattle: '🐍', pong: '🏒', trivia: '❓' };
 const THREE_D = { chess: 'board', checkers: 'board', connect4: 'c4', pong: 'paddle', tronduel: 'tron', uttt: 'grid', ttt: 'grid', trivia: 'trivia', battleship: 'grid', snakebattle: 'snake' }; // every duel game is true 3D; 2D canvas is only the silent no-WebGL fallback
+let variant = 'flat'; // 'v36' = original-name 3D game, 'flat' = current version ("… Flat")
 let loop = null, view3d = null, keys = null, hr = null, mv = null; const mutedSeats = new Set(); const mm = new Matchmaker({ isBlocked: (a, b) => !!mesh()?.blocklist?.isBlocked(b), isBanned: c => !!mesh()?.banlist?.isBanned?.(c), idTag: () => mesh()?.code || '' });
 // JOIN-ANYTIME: running tables advertised on the mesh ('tbl'); picking a game drops you into a matching open table first.
 const board = new TableBoard(); let boardArc = null, boardUnsub = null; let hooks = {};
@@ -32,10 +33,14 @@ export function stopMatch(keep) { clearInterval(loop); loop = null; if (!keep ||
 const q = new URLSearchParams(globalThis.location?.search || '');
 export function matchView(v, me, mode) {
   const list = gamesFor(mode);
-  v.innerHTML = `<div class="arc-games">${list.map(g => `<button class="arc-game" data-mg="${g.id}"><span class="ic">${ICON[g.id] || '•'}</span><b>${esc(g.name)}</b><small>${g.kind === 'realtime' ? 'real-time' : 'turn-based'}${THREE_D[g.id] ? ' · 3D' : ''}</small></button>`).join('')}</div>
+  // v54 (David): the v36 3D games come back under their ORIGINAL names ("<id>@3d"); the current versions stay, renamed "… Flat".
+  // Both variants share the same game logic, matchmaking queue, tables, presence, bot hold/swap and join invite (queue key = base id).
+  const card = (g, v3) => `<button class="arc-game" data-mg="${g.id}${v3 ? '@3d' : ''}"><span class="ic">${ICON[g.id] || '•'}</span><b>${esc(v3 || !THREE_D[g.id] ? g.name : g.name + ' Flat')}</b><small>${g.kind === 'realtime' ? 'real-time' : 'turn-based'}${THREE_D[g.id] ? ' · 3D' : ''}</small></button>`;
+  v.innerHTML = `<div class="arc-games">${list.map(g => (THREE_D[g.id] ? card(g, true) : '') + card(g, false)).join('')}</div>
     <p class="muted small">Matched from the mesh with players in your age group only. After ${BOT_START_MS / 1000}s a bot match starts while still seeking humans; Join invite (~${INVITE_MS / 1000}s) to swap in. Empty seats show "· AI". Blocks and bans respected.</p>`;
-  ensureBoard(); v.querySelectorAll('[data-mg]').forEach(b => b.onclick = () => start(v, me, mode, b.dataset.mg));
-  const auto = q.get('arcgame'); if (auto && list.some(g => g.id === auto)) start(v, me, mode, auto);
+  const go = mg => { variant = /@3d$/.test(mg) ? 'v36' : 'flat'; start(v, me, mode, mg.replace(/@3d$/, '')); };
+  ensureBoard(); v.querySelectorAll('[data-mg]').forEach(b => b.onclick = () => go(b.dataset.mg));
+  const auto = q.get('arcgame'); if (auto && list.some(g => g.id === auto.replace(/@3d$/, ''))) go(auto);
 }
 function start(v, me, mode, gid, asked = false) { stopMatch(); const k = nacl.sign.keyPair(), code = mesh()?.code || 'ME';
   const arc = ensureBoard(), find = () => arc && board.find(gid, mode, band(me), { isBlocked: c => !!mesh()?.blocklist?.isBlocked(c) }); let t = find();
@@ -47,7 +52,7 @@ function start(v, me, mode, gid, asked = false) { stopMatch(); const k = nacl.si
   const M = r.match; mesh()?.arcade?.send({ op: 'mq', g: gid, mode, band: band(me) }); play(v, me, M, k.secretKey, code); }
 function play(v, me, M, sec, code, net = null) { stopMatch(M); const g = M.g, mySeat = () => M.seats.findIndex(s => s.code === code), P = FX.palette();
   const use3d = !!THREE_D[g.id];
-  v.innerHTML = `<div class="match"><div class="row gap mhead"><button id="m-back" class="small">‹ Games</button><b class="grow">${esc(g.name)} · ${esc(M.mode)}</b></div><div id="m-status" class="small muted m-status" aria-live="polite"></div>
+  v.innerHTML = `<div class="match"><div class="row gap mhead"><button id="m-back" class="small">‹ Games</button><b class="grow">${esc(variant === 'v36' || !THREE_D[g.id] ? g.name : g.name + ' Flat')} · ${esc(M.mode)}</b></div><div id="m-status" class="small muted m-status" aria-live="polite"></div>
     <div id="m-invite" class="card warn" hidden role="dialog" aria-live="assertive"><b>Join human match?</b> <span id="m-inv-txt"></span>
       <div class="row gap"><button id="m-inv-yes" class="primary">Accept</button><button id="m-inv-no" class="small">Decline</button><span class="muted small" id="m-inv-cd"></span></div></div>
     <div class="arc-stage"><canvas id="m-cv" width="720" height="720"></canvas><canvas id="m-3d-cv" class="arc-3d" hidden></canvas></div>
@@ -87,7 +92,7 @@ function play(v, me, M, sec, code, net = null) { stopMatch(M); const g = M.g, my
   // ---- 3D views
   const try3d = async () => { if (!use3d) return; const S = await import('./arcade/three-scene.js'); if (!S.can3D()) { msg = '2D mode (3D needs WebGL2)'; S.noteFallback(cv.parentElement, globalThis.__cm3dDiag?.fallback || 'no WebGL2'); return; }
     c3.hidden = false; cv.hidden = true; c3.width = c3.clientWidth; c3.height = c3.clientHeight; const kind = THREE_D[g.id];
-    if (kind === 'board') { const B = await import('./arcade/board3d.js'); view3d = await B.board3d(c3, { game: g.id, onPick: sq => pickSq(sq) }); }
+    if (kind === 'board') { const B = variant === 'v36' ? await import('./arcade/board3d-v36.js') : await import('./arcade/board3d.js'); view3d = await B.board3d(c3, { game: g.id, onPick: sq => pickSq(sq) }); }
     if (kind === 'c4') { const B = await import('./arcade/c4-3d.js'); view3d = await B.connect4_3d(c3, { onPick: col => mine() && doMove({ col }) }); }
     if (kind === 'paddle') { const B = await import('./arcade/paddle3d.js'); view3d = await B.paddle3d(c3, { style: localStorage.getItem('cm.arc.paddle') || (q.get('style') || 'airhockey') }); }
     if (kind === 'grid' && g.id === 'ttt') { const B = await import('./arcade/grid3d.js'); view3d = await B.grid3d(c3, { boards: [{ id: 't', n: 3, cx: 0, cz: 0, size: 6 }], R: 10, tilt: 1.1, onPick: (b, c) => { if (mine()) doMove({ k: c }); } }); }
