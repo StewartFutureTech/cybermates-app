@@ -19,7 +19,8 @@ await new Promise((res, rej) => { srv.stdout.on('data', d => /localhost/.test(d)
 browser = await puppeteer.launch({ executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
 const until = (p, fn, arg, ms = 30000) => p.waitForFunction(fn, { timeout: ms, polling: 250 }, arg).catch(e => { throw new Error(e.message + ' :: ' + String(fn).slice(0, 140)); });
 const wait = ms => new Promise(r => setTimeout(r, ms));
-const open = async (as, game, mode = '1v1') => { const p = await browser.newPage(); await p.setViewport({ width: 390, height: 844, isMobile: true });
+let ctx = null; // sweep: fresh storage context per game (many same-origin tabs otherwise stall IndexedDB at boot step 'device-key')
+const open = async (as, game, mode = '1v1') => { const p = await (ctx || browser).newPage(); await p.setViewport({ width: 390, height: 844, isMobile: true });
   await p.evaluateOnNewDocument(() => { globalThis.__cmAckTest = { minMs: 0, noScroll: true }; localStorage.setItem('cm.sound', 'off'); }); p.on('dialog', d => d.accept());
   p.on('pageerror', e => { if (curGame === 'battleship' && /reading '0'/.test(e.message)) { known.push(e.message); return; } errs.push(`[${as}] ${e.message}`); console.log(`[${as}] pageerror`, e.message); });
   await p.goto(URL0 + '?as=' + as + '&loaderMin=300&arcmode=' + mode + '&arcgame=' + encodeURIComponent(game));
@@ -76,12 +77,12 @@ try {
   }
   // ---- every other original-name 3D game: a second player drops into the running table (seated now or queued for next round)
   const SUF = process.env.SUFFIX ?? '@3d'; for (const game of (process.env.REST || 'checkers,ttt,uttt,battleship,tronduel,snakebattle,trivia').split(',').filter(Boolean)) {
-    curGame = game; const md = game === 'snakebattle' ? '2v2' : '1v1'; // Snake Battle has no 1v1
+    ctx = await browser.createBrowserContext(); curGame = game; const md = game === 'snakebattle' ? '2v2' : '1v1'; // Snake Battle has no 1v1
     const A = await open('seed-2', game + SUF, md); const a0 = await M(A); await wait(2500); const B = await open('seed-5', game + SUF, md);
     await until(B, id => globalThis.__cmMatch()?.id === id, a0.id, 15000);
     await until(A, me => { const m = globalThis.__cmMatch(); return m.seats.some(s => s.code === me) || m.pending.includes(me); }, await B.evaluate(() => globalThis.__cmMatch().me), 15000);
     const a1 = await M(A), b1 = await M(B); assert(a1.view === (SUF ? 'v36' : 'flat') && b1.view === a1.view && a1.host === b1.host && (a1.seats.some(s => s.code === b1.me) ? a1.seats.filter(s => s.ai).length < a0.seats.filter(s => s.ai).length : a1.pending.includes(b1.me)), `${game} (3D): joiner ${a1.seats.some(s => s.code === b1.me) ? 'took a bot seat NOW' : 'queued for the next round'}, same table + host`);
-    await A.close(); await B.close(); curGame = ''; }
+    await A.close(); await B.close(); await ctx.close(); ctx = null; curGame = ''; }
   if (known.length) console.log(`note: ${known.length} known pre-existing battleship watcher page error(s) (also in Battleship Flat):`, known[0]);
   assert(errs.length === 0, 'no page errors in any tab' + (errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''));
   console.log('ALL OK e2e-joinanytime3d'); await cleanup(0);
