@@ -23,7 +23,9 @@ await toProfile();
 const txt = await p.$eval('#view', e => e.innerText);
 assert(!/Sensitive info/i.test(txt), 'Sensitive information section removed');
 assert(!/Peer network \(beta\)/i.test(txt), 'Peer network (beta) section removed');
-assert(await p.waitForSelector('#devlink', { timeout: 8000 }).catch(() => null), 'device linking + Advanced settings still on Profile');
+// admin flavor (this test) hosts device linking + Advanced settings under Dev, as in v56; the public flavor keeps them on Profile (smoke-linking-ui + profile57 public check below)
+assert(!(await p.$('#pf-top ~ * #p2p-sim')), 'no peer-network sim controls on Profile');
+await p.$eval('nav [data-tab=dev]', e => e.click()); assert(await p.waitForSelector('#devlink', { timeout: 8000 }).catch(() => null), 'admin: device linking + Advanced settings under Dev'); await toProfile();
 assert(await p.$('#pf-top .photos') && await p.$('#pf-top [data-preset]') && await p.$('#pf-top #f_name') && await p.$('#pf-top #f_birthday[type=date]'), 'top card: photo, starter characters, name, birthday');
 assert(await p.$eval('#f_birthday', e => e.value) === '1995-05-05', 'birthday defaults to the age-gate date');
 await p.$eval('#f_birthday', e => { e.value = '1990-01-02'; e.dispatchEvent(new Event('input')); }); assert(/Age 3\d/.test(await p.$eval('#pf-age', e => e.textContent)), 'age auto-calculated from birthday');
