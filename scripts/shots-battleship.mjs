@@ -10,7 +10,7 @@ const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', hea
 let fail = 0; const ok = (c, m) => { console.log(c ? 'ok' : 'FAIL', m); if (!c) fail = 1; }; const wait = ms => new Promise(r => setTimeout(r, ms));
 async function open(q, [w, h]) { const p = await b.newPage(); p.setDefaultTimeout(120000); const errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.setViewport({ width: w, height: h, deviceScaleFactor: 1, isMobile: true, hasTouch: false });
-  await p.evaluateOnNewDocument(() => { localStorage.setItem('cm.sound', 'off'); globalThis.__cmSfxLog = []; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; });
+  await p.evaluateOnNewDocument(() => { localStorage.setItem('cm.sound', 'off'); globalThis.__cmSfxLog = []; globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; });
   await p.goto(U + '?loaderMin=0&ftue=reset&tier=0&force3d=1' + q); await p.waitForSelector('#ag-dob'); await p.$eval('#ag-dob', e => e.value = '1995-05-05'); await p.$eval('#ag-go', e => e.click());
   await p.waitForSelector('#tm-ok'); await p.$eval('#tm-ok', e => e.click()); await p.$eval('#tm-yes', e => e.click());
   await p.waitForSelector('#losswarn', { timeout: 15000 }).then(() => p.$eval('#loss-ok', e => e.click())).catch(() => {});

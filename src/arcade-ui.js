@@ -159,7 +159,11 @@ function massView(v, me) {
     t3?.set(W, colors(W), myCode); };
   // ---- analog 2D renderer: interpolated between ticks (rAF), camera follows my head, particles + shake + haptics/sfx
   let stepT = performance.now(), shakeA = 0; const parts = [];
-  const feel = (W, evs) => { const me = W.players.get(myCode), P = FX.palette(); for (const e of evs) { const mine = e.who === myCode;
+  // cm-v58: round-over card for Light cycles / Snake: when you go out, show your score + best for a moment while you respawn
+  // (respawn stays instant; the card never blocks input).
+  let myLast = 0, myBest = 0, overT = 0; const outCard = sc => { const st = v.querySelector('.arc-stage'); if (!st) return; let o = st.querySelector('.arc-over'); if (!o) { o = document.createElement('div'); o.className = 'arc-over card glass neon-edge'; o.setAttribute('role', 'status'); st.append(o); }
+    myBest = Math.max(myBest, sc); o.innerHTML = `<b>💥 ${g === 'tron' ? 'Crashed!' : 'Game over!'}</b><div class="small">Score ${sc} · Best ${myBest}</div><div class="muted small">Respawning — keep steering</div>`; o.hidden = false; clearTimeout(overT); overT = setTimeout(() => { o.hidden = true; }, 2200); };
+  const feel = (W, evs) => { const me = W.players.get(myCode), P = FX.palette(); if (evs.some(e => e.t === 'kill' && e.who === myCode)) outCard(myLast); else if (me?.alive) { myLast = me.score || 0; myBest = Math.max(myBest, myLast); } for (const e of evs) { const mine = e.who === myCode;
       if (e.t === 'kill') { if (mine) { gameFx('die', { sound: false }); shakeA = 14; } else if (e.by === myCode) gameFx('kill', { sound: false }); } else if (e.t === 'food' && mine) gameFx('eat', { haptic: false, sound: false }); else if (e.t === 'eat' && mine) { gameFx('kill', { sound: false }); shakeA = Math.max(shakeA, 5); } else if (e.t === 'claim' && mine) gameFx('claim', { sound: false }); else if (e.t === 'cut' && mine) { gameFx('kill', { sound: false }); shakeA = Math.max(shakeA, 6); }
       if (t3 || !me || !['kill', 'eat', 'claim', 'cut'].includes(e.t)) continue; const x = e.x ?? W.players.get(e.who)?.x, y = e.y ?? W.players.get(e.who)?.y; if (x == null) continue; const c = colors(W).find(c => c.code === (e.victim || e.who))?.color || P.cy;
       for (let k = 0; k < (e.t === 'kill' ? 26 : 12); k++) { const a = Math.random() * 6.283, v = 0.05 + Math.random() * 0.2; parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1, c }); } } if (parts.length > 400) parts.splice(0, parts.length - 400); t3?.events?.(evs); };

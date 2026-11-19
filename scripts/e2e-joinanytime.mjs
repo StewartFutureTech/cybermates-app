@@ -15,7 +15,7 @@ browser = await puppeteer.launch({ executablePath: process.env.CHROME_PATH || '/
 const until = (p, fn, arg, ms = 30000) => p.waitForFunction(fn, { timeout: ms, polling: 250 }, arg).catch(e => { throw new Error(e.message + ' :: ' + String(fn).slice(0, 120)); });
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const open = async (as, game) => { const p = await browser.newPage(); await p.setViewport({ width: 390, height: 844, isMobile: true });
-  await p.evaluateOnNewDocument(() => { globalThis.__cmAckTest = { minMs: 0, noScroll: true }; localStorage.setItem('cm.sound', 'off'); }); p.on('dialog', d => d.accept());
+  await p.evaluateOnNewDocument(() => { globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; localStorage.setItem('cm.sound', 'off'); }); p.on('dialog', d => d.accept());
   p.on('pageerror', e => { errs.push(`[${as}] ${e.message}`); console.log(`[${as}] pageerror`, e.message); });
   await p.goto(URL0 + '?as=' + as + '&loaderMin=300&arcmode=1v1&arcgame=' + game);
   const ag = await p.waitForSelector('#ag-dob', { timeout: 15000 }).catch(() => null); if (ag) { await p.$eval('#ag-dob', e => e.value = '1995-05-05'); await p.click('#ag-go'); }

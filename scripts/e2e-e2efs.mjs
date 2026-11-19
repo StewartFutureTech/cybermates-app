@@ -20,7 +20,7 @@ const boot = async (p, as) => { await p.goto(URL0 + '?as=' + as + '&loaderMin=30
   const terms = await p.waitForSelector('#tm-ok', { timeout: 4000 }).catch(() => null); if (terms) { await p.click('#tm-ok'); await p.click('#tm-yes'); await p.waitForSelector('#losswarn', { timeout: 8000 }).then(() => p.$eval('#loss-ok', e => e.click())).catch(() => {}); }
   await until(p, () => globalThis.__cmMesh?.()?.code, null, 45000); };
 const open = async as => { const p = await browser.newPage(); await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: false });
-  await p.evaluateOnNewDocument(() => { globalThis.__cmAckTest = { minMs: 0, noScroll: true }; localStorage.setItem('cm.sound', 'off'); }); p.on('dialog', d => d.accept());
+  await p.evaluateOnNewDocument(() => { globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; localStorage.setItem('cm.sound', 'off'); }); p.on('dialog', d => d.accept());
   p.on('pageerror', e => { errs.push(`[${as}] ${e.message}`); console.log(`[${as}] pageerror`, e.message); });
   await boot(p, as); return p; };
 const M = (p, fn, arg) => p.evaluate(fn, arg);

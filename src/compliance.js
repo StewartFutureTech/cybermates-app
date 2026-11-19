@@ -19,15 +19,17 @@ export const sessionBirthdate = () => sessionDob;
 export const forgetDob = () => { sessionDob = null; };
 export async function ageStatus(vault) { const p = await vault.read(); return p?.age_gate || null; }
 // UK Online Safety Act: "highly effective age assurance" needed if sexual content is possible. Vendor integration TBD.
-export function ukAgeAssurance(country) { return country === 'GB' ? { required: true, status: 'PLACEHOLDER: integrate Ofcom-compliant age-assurance vendor (e.g. facial age estimation / ID check) before UK launch' } : { required: false }; }
+export function ukAgeAssurance(country) { return country === 'GB' ? { required: true, status: 'pending-vendor' /* TODO(legal): Ofcom-compliant age-assurance vendor before UK launch */ } : { required: false }; }
 // ---- 5. state dating-safety notices (UNVERIFIED wording — copy statutory text: NJ 56:8-171, NY GBL 394-cc, IL 815 ILCS 518, TX Bus.&Com. ch.106) ----
 export const BACKGROUND_CHECK_DISCLOSURE = 'Cybermates does NOT conduct criminal background checks or identity verification on its members.';
+const REPORT_LINE = `Report unsafe behavior with the Report button on any profile or chat, or email ${SAFETY_CONTACT}.`;
 const SAFETY_TIPS = 'Safety tips: meet first in a public place, tell a friend where you are going, arrange your own transport, never send money or financial information, and report anyone who asks for it.';
 export const DATING_SAFETY = {
-  NJ: `New Jersey: ${BACKGROUND_CHECK_DISCLOSURE} ${SAFETY_TIPS} [PLACEHOLDER — replace with N.J.S.A. 56:8-171 required text]`,
-  NY: `New York: ${BACKGROUND_CHECK_DISCLOSURE} ${SAFETY_TIPS} [PLACEHOLDER — replace with GBL §394-cc required text]`,
-  IL: `Illinois: ${BACKGROUND_CHECK_DISCLOSURE} ${SAFETY_TIPS} [PLACEHOLDER — replace with 815 ILCS 518 required text]`,
-  TX: `Texas: ${BACKGROUND_CHECK_DISCLOSURE} ${SAFETY_TIPS} [PLACEHOLDER — replace with Tex. Bus. & Com. Code ch. 106 required text]`,
+  // cm-v58: user-facing wording (no bracketed placeholders). TODO(legal): have counsel confirm against the statutes above.
+  NJ: `New Jersey residents: ${BACKGROUND_CHECK_DISCLOSURE} ${SAFETY_TIPS} ${REPORT_LINE}`,
+  NY: `New York residents: ${BACKGROUND_CHECK_DISCLOSURE} ${SAFETY_TIPS} ${REPORT_LINE}`,
+  IL: `Illinois residents: ${BACKGROUND_CHECK_DISCLOSURE} ${SAFETY_TIPS} ${REPORT_LINE}`,
+  TX: `Texas residents: ${BACKGROUND_CHECK_DISCLOSURE} ${SAFETY_TIPS} ${REPORT_LINE}`,
 };
 const STATE_CODES = { 'new jersey': 'NJ', nj: 'NJ', 'new york': 'NY', ny: 'NY', illinois: 'IL', il: 'IL', texas: 'TX', tx: 'TX' };
 // Region placeholder: profile region/state (user-entered) → notice. TODO: also use coarse IP/locale at signup.
@@ -70,7 +72,7 @@ export function ageGateScreen(vault) {
     const d = document.createElement('div'); d.id = 'agegate'; d.className = 'cm-gate cm-onb'; d.style.cssText = 'position:fixed;inset:0;background:#000e;z-index:102;display:flex;align-items:center;justify-content:center;padding:16px';
     d.innerHTML = `<div class="card" style="max-width:420px"><h3>🎂 When's your birthday?</h3><p class="small">We only keep an “adult / under 18” flag on this phone — not your birth date. Under 18: Dating and Roulette are not available, and Friends and Discover only ever show other under-18s. Games can match you with 18+ players (game name and avatar only, no chat or voice across ages) unless a parent turns that off.</p>
       <input type="date" id="ag-dob" max="${new Date().toISOString().slice(0, 10)}"><p id="ag-err" class="small"></p>
-      <p class="muted small">UK users: additional age assurance will be required before launch (placeholder).</p><button id="ag-go" class="primary">Continue</button></div>`;
+      <p class="muted small">In some countries we may ask for an additional age check before you can use every feature.</p><button id="ag-go" class="primary">Continue</button></div>`;
     document.body.append(d); import('./rain-bg.js').then(m => m.attachRain(d)).catch(() => {});
     d.querySelector('#ag-go').onclick = async () => {
       const r = checkAge(d.querySelector('#ag-dob').value);

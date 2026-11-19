@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process'; import puppeteer from 'puppeteer-cor
 const PORT = 4199, U = `http://localhost:${PORT}/`, OUT = (process.env.SHOTS || '/workspace/cybermates-shots') + '/v35-logo'; fs.mkdirSync(OUT, { recursive: true });
 const srv = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true }); await new Promise(r => setTimeout(r, 2500));
 const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox'] }); let fail = 0, n = 0; const ok = (c, m) => { n++; console.log((c ? 'ok ' : 'FAIL ') + m); if (!c) fail++; };
-try { for (const w of [320, 390, 430]) { const p = await b.newPage(); await p.setViewport({ width: w, height: 760, deviceScaleFactor: 2, isMobile: true, hasTouch: true }); await p.evaluateOnNewDocument(() => { globalThis.__cmAckTest = { minMs: 0, noScroll: true }; localStorage.setItem('cm.sound', 'off'); });
+try { for (const w of [320, 390, 430]) { const p = await b.newPage(); await p.setViewport({ width: w, height: 760, deviceScaleFactor: 2, isMobile: true, hasTouch: true }); await p.evaluateOnNewDocument(() => { globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; localStorage.setItem('cm.sound', 'off'); });
   await p.goto(U + '?jackbtn=1&ftue=reset'); await p.waitForSelector('#ag-dob', { timeout: 20000 }).catch(() => {});
   const kf = await p.evaluate(() => { for (const sh of document.styleSheets) for (const r of sh.cssRules) if (r.type === 7 && r.name === 'lgWord') return [...r.cssRules].map(k => k.keyText).join(); return ''; });
   ok(kf === '0%,100%', `${w}px lgWord keyframes have no hold gap (${kf})`);

@@ -9,7 +9,7 @@ const only = process.argv[3]?.split(',');
 for (const [name, q0] of Object.entries(G)) { if (only && !only.includes(name)) continue; const q = '&arcmode=' + q0;
   const p = await b.newPage(); p.setDefaultTimeout(120000); const errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: false });
-  await p.evaluateOnNewDocument(() => { localStorage.setItem('cm.sound', 'off'); localStorage.setItem('cm.arc.3d', 'on'); globalThis.__cmAckTest = { minMs: 0, noScroll: true }; });
+  await p.evaluateOnNewDocument(() => { localStorage.setItem('cm.sound', 'off'); localStorage.setItem('cm.arc.3d', 'on'); globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; });
   await p.goto(U + '?loaderMin=0&ftue=reset&tier=2&force3d=1' + q); await p.waitForSelector('#ag-dob'); await p.$eval('#ag-dob', e => e.value = '1995-05-05'); await p.$eval('#ag-go', e => e.click());
   await p.waitForSelector('#tm-ok'); await p.$eval('#tm-ok', e => e.click()); await p.$eval('#tm-yes', e => e.click());
   await p.waitForSelector('#losswarn', { timeout: 15000 }).then(() => p.$eval('#loss-ok', e => e.click())).catch(() => {});

@@ -11,7 +11,7 @@ try {
  for (const MODE of ['cryptokey-idb', 'all']) { console.log('-- scenario', MODE);
   const p = await b.newPage(); p.setDefaultTimeout(60000); await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
   const errs = []; p.on('pageerror', e => errs.push(e.message));
-  await p.evaluateOnNewDocument(m => { globalThis.__cmFailMode = m; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; }, MODE); await p.evaluateOnNewDocument(INJ); await p.evaluateOnNewDocument(() => localStorage.setItem('cm.sound', 'off'));
+  await p.evaluateOnNewDocument(m => { globalThis.__cmFailMode = m; globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; }, MODE); await p.evaluateOnNewDocument(INJ); await p.evaluateOnNewDocument(() => localStorage.setItem('cm.sound', 'off'));
   await p.goto(U + '?jackbtn=1');
   ok(await p.evaluate(() => window.__cmInjected), 'failures injected: ' + MODE);
   const subtleDead = await p.evaluate(() => crypto.subtle.digest('SHA-256', new Uint8Array(1)).then(() => false, () => true)); if (MODE === 'all') ok(subtleDead, 'crypto.subtle rejects');

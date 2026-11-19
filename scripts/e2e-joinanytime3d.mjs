@@ -21,7 +21,7 @@ const until = (p, fn, arg, ms = 30000) => p.waitForFunction(fn, { timeout: ms, p
 const wait = ms => new Promise(r => setTimeout(r, ms));
 let ctx = null; // sweep: fresh storage context per game (many same-origin tabs otherwise stall IndexedDB at boot step 'device-key')
 const open = async (as, game, mode = '1v1') => { const p = await (ctx || browser).newPage(); await p.setViewport({ width: 390, height: 844, isMobile: true });
-  await p.evaluateOnNewDocument(() => { globalThis.__cmAckTest = { minMs: 0, noScroll: true }; localStorage.setItem('cm.sound', 'off'); }); p.on('dialog', d => d.accept());
+  await p.evaluateOnNewDocument(() => { globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; localStorage.setItem('cm.sound', 'off'); }); p.on('dialog', d => d.accept());
   p.on('pageerror', e => { if (curGame === 'battleship' && /reading '0'/.test(e.message)) { known.push(e.message); return; } errs.push(`[${as}] ${e.message}`); console.log(`[${as}] pageerror`, e.message); });
   await p.goto(URL0 + '?as=' + as + '&loaderMin=300&arcmode=' + mode + '&arcgame=' + encodeURIComponent(game));
   const ag = await p.waitForSelector('#ag-dob', { timeout: 15000 }).catch(() => null); if (ag) { await p.$eval('#ag-dob', e => e.value = '1995-05-05'); await p.click('#ag-go'); }

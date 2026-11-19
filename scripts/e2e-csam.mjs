@@ -30,7 +30,7 @@ const boot = async (p, as) => { await p.goto(URL0 + '?as=' + as + '&loaderMin=30
   await until(p, () => globalThis.__cmMesh?.()?.code, null, 45000); };
 // dialogs: tests push answers for prompt/confirm; alerts are recorded
 const open = async as => { const p = await browser.newPage(); await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: false });
-  await p.evaluateOnNewDocument(() => { globalThis.__cmAckTest = { minMs: 0, noScroll: true }; localStorage.setItem('cm.sound', 'off'); });
+  await p.evaluateOnNewDocument(() => { globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; localStorage.setItem('cm.sound', 'off'); });
   p._answers = []; p._alerts = [];
   p.on('dialog', d => { if (d.type() === 'alert') { p._alerts.push(d.message()); return d.accept(); } const a = p._answers.length ? p._answers.shift() : null;
     if (d.type() === 'prompt') return a == null ? d.accept() : d.accept(String(a)); return a === false ? d.dismiss() : d.accept(); });

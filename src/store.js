@@ -10,6 +10,9 @@ export const dailyLimit = w => w?.plus ? PLUS_DAILY_STARTERS : DAILY_STARTERS;
 export const CHAT_TTL_MS = WHILE_MS; // v51: follows default retention bubble ('while' ≈ 30d), not a fixed 48h
 export const VOICE_CAP_MS = 30 * 60 * 1000; // 'Grok voice setup' $4.99 one-time, 30-min cap (~$2.40 at ~$0.08/min)
 export const CREDITS = { starters5: [5, 0], starters15: [15, 0], starters40: [40, 0], boost1: [0, 1], boost5: [0, 5], boost15: [0, 15] };
+// cm-v58: a brand-new device starts with NO current user (blank onboarding), not the seed-26 "Tox (TEST)" demo profile.
+// Admin/dev builds and the node test harness (no import.meta.env) keep the legacy demo user so seed-based tests still work.
+const DEMO_USER = (() => { try { const e = import.meta.env; return !e || e.VITE_ADMIN === '1' ? 'seed-26' : null; } catch { return 'seed-26'; } })();
 const K = 'cybermates:v2'; // v2: 3 modes, global locations, per-mode distance, privacy
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -17,7 +20,7 @@ class LocalAdapter {
   _load() { try { return JSON.parse(localStorage.getItem(K)) || null; } catch { return null; } }
   _save(s) { localStorage.setItem(K, JSON.stringify(s)); }
   _s() { let s = this._load(); if (!s) { s = this._fresh(); this._save(s); } const cut = Date.now() - CHAT_TTL_MS, n = s.messages.length; s.messages = s.messages.filter(m => m.at > cut); if (s.messages.length !== n) this._save(s); return s; } // v51: cut by CHAT_TTL_MS (= while/DEFAULT retention window)
-  _fresh() { return { profiles: makeSeed(), messages: [], currentUser: 'seed-26' }; }
+  _fresh() { return { profiles: makeSeed(), messages: [], currentUser: globalThis.__cmDemoUser ?? DEMO_USER }; } // __cmDemoUser: browser tests of the public flavor that need the old demo user
   async reset() { this._save(this._fresh()); this.migrated = false; const s = this._s(); delete s.wallet; this._save(s); const st = this._w().store; st.commit(st.ver(), await this._w()._seal({ wallets: {} })); }
   async getCurrentUserId() { return this._s().currentUser; }
   async setCurrentUserId(id) { const s = this._s(); s.currentUser = id; this._save(s); }

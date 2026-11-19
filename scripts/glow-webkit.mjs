@@ -6,7 +6,7 @@ const Q = { snake: '&arcmode=mass&arcgame=snake', tron: '&arcmode=mass&arcgame=t
 const b = await webkit.launch(); let fail = 0; if (SH) fs.mkdirSync(SH, { recursive: true });
 for (const g of GAMES) { const c = await b.newContext({ ...devices['iPhone 14'] });
   await c.route(BASE + '**', r => { let u = new URL(r.request().url()).pathname; if (u === '/' || !fs.existsSync(DIST + u)) u = '/index.html'; const ct = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json' }[path.extname(u)] || 'application/octet-stream'; r.fulfill({ body: fs.readFileSync(DIST + u), contentType: ct }); });
-  await c.addInitScript(() => { localStorage.setItem('cm.sound', 'off'); localStorage.setItem('cm.arc.3d', 'on'); localStorage.setItem('cybermates:perf-skipgates', '1'); globalThis.__cmAckTest = { minMs: 0, noScroll: true };
+  await c.addInitScript(() => { localStorage.setItem('cm.sound', 'off'); localStorage.setItem('cm.arc.3d', 'on'); localStorage.setItem('cybermates:perf-skipgates', '1'); globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true };
     const raf = globalThis.requestAnimationFrame.bind(globalThis); globalThis.requestAnimationFrame = f => raf(t => { if (globalThis.__cm3d) { const e = performance.now() + 35; while (performance.now() < e); } f(t); }); });
   const p = await c.newPage(); let row;
   try { await p.goto(BASE + '?loaderMin=0&force3d=1' + Q[g]);

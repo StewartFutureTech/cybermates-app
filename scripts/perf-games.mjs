@@ -12,7 +12,7 @@ const out = []; const WIN = Number(process.env.WIN || 6000);
 for (const [name, q] of Object.entries(GAMES)) { if (only && !only.includes(name)) continue;
   const p = await b.newPage(); p.setDefaultTimeout(120000); await p.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   const cdp = await p.createCDPSession(); await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
-  await p.evaluateOnNewDocument(() => { localStorage.setItem('cm.sound', 'off'); localStorage.setItem('cm.arc.3d', 'on'); localStorage.setItem('cybermates:perf-skipgates', '1'); globalThis.__cmAckTest = { minMs: 0, noScroll: true }; });
+  await p.evaluateOnNewDocument(() => { localStorage.setItem('cm.sound', 'off'); localStorage.setItem('cm.arc.3d', 'on'); localStorage.setItem('cybermates:perf-skipgates', '1'); globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; });
   const t0 = Date.now(); await p.goto(U + '?loaderMin=0&force3d=1' + q);
   const ag = await p.waitForSelector('#ag-dob', { timeout: 30000 }).catch(() => null); if (ag) { await p.$eval('#ag-dob', e => e.value = '1995-05-05'); await p.$eval('#ag-go', e => e.click()); }
   const tm = await p.waitForSelector('#tm-ok', { timeout: 20000 }).catch(() => null); if (tm) { await p.$eval('#tm-ok', e => e.click()); await p.$eval('#tm-yes', e => e.click()); await p.waitForSelector('#losswarn', { timeout: 8000 }).then(() => p.$eval('#loss-ok', e => e.click())).catch(() => {}); }

@@ -16,7 +16,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 for (const game of (process.env.GAMES || 'chess@3d,connect4@3d,pong@3d,chess,connect4,pong').split(',')) {
   const p = await browser.newPage(); await p.setViewport({ width: 390, height: 844, isMobile: true, deviceScaleFactor: 1 });
   await p.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
-  await p.evaluateOnNewDocument(() => { globalThis.__cmAckTest = { minMs: 0, noScroll: true }; localStorage.setItem('cm.sound', 'off'); Math.random = (() => { let s = 7; return () => ((s = (s * 16807) % 2147483647) / 2147483647); })();
+  await p.evaluateOnNewDocument(() => { globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; localStorage.setItem('cm.sound', 'off'); Math.random = (() => { let s = 7; return () => ((s = (s * 16807) % 2147483647) / 2147483647); })();
     // deterministic game clock for real-time games (Air Hockey): the 40 ms match loop is paused until the 3D canvas is up, then runs exactly 50 ticks
     const si = globalThis.setInterval; globalThis.setInterval = (fn, ms, ...a) => { if (ms !== 40) return si(fn, ms, ...a); let k = 0; return si(() => { const c = document.querySelector('#m-3d-cv'); if (!c || c.hidden || k >= 50) return; k++; fn(); }, ms, ...a); }; }); p.on('dialog', d => d.accept());
   await p.goto(URL0 + '?as=seed-3&loaderMin=300&arcmode=1v1&arcgame=' + encodeURIComponent(game));

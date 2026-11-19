@@ -12,7 +12,7 @@ await new Promise((res, rej) => { srv.stdout.on('data', d => /localhost/.test(d)
 browser = await puppeteer.launch({ executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox'] });
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const p = await browser.newPage(); p.on('dialog', d => d.accept()); p.on('pageerror', e => console.log('pageerror', e.message)); await p.setViewport({ width: 390, height: 844 });
-await p.evaluateOnNewDocument(() => { globalThis.__cmAckTest = { minMs: 0, noScroll: true }; localStorage.setItem('cm.sound', 'off'); });
+await p.evaluateOnNewDocument(() => { globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; localStorage.setItem('cm.sound', 'off'); });
 await p.goto(URL0 + '?as=seed-1&loaderMin=0');
 if (await p.waitForSelector('#ag-dob', { timeout: 6000 }).catch(() => null)) { await p.$eval('#ag-dob', e => e.value = '1995-05-05'); await p.click('#ag-go'); }
 if (await p.waitForSelector('#tm-ok', { timeout: 4000 }).catch(() => null)) { await p.click('#tm-ok'); await wait(300); await p.click('#tm-yes'); await p.waitForSelector('#loss-ok', { timeout: 8000 }).then(() => p.$eval('#loss-ok', e => e.click())).catch(() => {}); }
@@ -60,4 +60,16 @@ assert(v.inv.includes('discord.gg/aaa111') && v.inv.includes('discord.gg/bbb222'
 assert(v.tw === 'twitch.tv/neo' && v.kick === 'kick.com/neo', 'saved Twitch + Kick');
 assert(v.out.includes('fishing') && !v.ints.includes('fishing') && v.ints.includes('anime') && v.anime.includes('Naruto'), 'entries kept in the right category after save');
 assert(v.bd === '1990-01-02' && v.city === 'Austin' && v.am && v.g === 'Two-spirit', 'birthday, city, only-after-match, custom gender persisted');
+// v58: the same fields survive a full page reload (not just a re-render)
+await p.reload(); if (await p.waitForSelector('#tm-ok', { timeout: 3000 }).catch(() => null)) { await p.click('#tm-ok'); await wait(300); await p.click('#tm-yes').catch(() => {}); }
+await p.waitForFunction(() => document.querySelector('nav [data-tab=profile]') && !document.getElementById('jackin'), { timeout: 30000 }); await p.$eval('#moodskip', e => e.click()).catch(() => {}); await toProfile();
+const r2 = await p.evaluate(() => ({ inv: [...document.querySelectorAll('#f_discordInvites [data-tlv]')].map(e => e.dataset.tlv), bd: document.querySelector('#f_birthday').value, age: document.querySelector('#pf-age').textContent,
+  city: document.querySelector('[data-loc] select[data-l=city]').value, region: document.querySelector('[data-loc] select[data-l=region]').value, g: document.querySelector('#f_gender input:checked')?.value }));
+assert(r2.inv.includes('discord.gg/aaa111') && r2.inv.includes('discord.gg/bbb222') && r2.bd === '1990-01-02' && /Age 3\d/.test(r2.age) && r2.city === 'Austin' && r2.region === 'TX' && r2.g === 'Two-spirit', 'after reload: Discord invites, birthday/age, city/state, gender persisted ' + JSON.stringify(r2));
+// v58: an adult account cannot move its birthday under 18 (age box accepted 15 on v56)
+{ const msgs = []; const h = d => msgs.push(d.message()); p.on('dialog', h); const y15 = new Date(); y15.setFullYear(y15.getFullYear() - 15);
+  await p.$eval('#f_birthday', (e, v) => { e.value = v; e.dispatchEvent(new Event('input')); }, y15.toISOString().slice(0, 10)); await p.$eval('#pf', f => f.requestSubmit()); await wait(800); p.off('dialog', h);
+  await p.reload(); if (await p.waitForSelector('#tm-ok', { timeout: 3000 }).catch(() => null)) { await p.click('#tm-ok'); await wait(300); await p.click('#tm-yes').catch(() => {}); }
+  await p.waitForFunction(() => document.querySelector('nav [data-tab=profile]') && !document.getElementById('jackin'), { timeout: 30000 }); await p.$eval('#moodskip', e => e.click()).catch(() => {}); await toProfile();
+  const bd = await p.$eval('#f_birthday', e => e.value); assert(msgs.some(m => /age group/i.test(m)) && bd === '1990-01-02', 'adult account: under-18 birthday refused, saved birthday unchanged'); }
 console.log('E2E PROFILE57 PASS'); cleanup(0);

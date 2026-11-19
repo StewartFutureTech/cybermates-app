@@ -12,7 +12,7 @@ console.log('preview up'); browser = await puppeteer.launch({ executablePath: pr
 console.log('chrome up');
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const until = async (page, fn, arg, ms = 15000) => page.waitForFunction(fn, { timeout: ms, polling: 200 }, arg);
-const open = async as => { const p = await browser.newPage(); await p.evaluateOnNewDocument(() => { globalThis.__cmAckTest = { minMs: 0, noScroll: true }; }); /* UX §2 ack gate: 30 s + forced scroll (tested in smoke-ui) */ p.on('dialog', d => d.accept()); p.on('pageerror', e => console.log(`[${as}] pageerror`, e.message)); await p.goto(URL0 + '?as=' + as + '&loaderMin=300');
+const open = async as => { const p = await browser.newPage(); await p.evaluateOnNewDocument(() => { globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; }); /* UX §2 ack gate: 30 s + forced scroll (tested in smoke-ui) */ p.on('dialog', d => d.accept()); p.on('pageerror', e => console.log(`[${as}] pageerror`, e.message)); await p.goto(URL0 + '?as=' + as + '&loaderMin=300');
   const ag = await p.waitForSelector('#ag-dob', { timeout: 6000 }).catch(() => null); if (ag) { await p.$eval('#ag-dob', e => e.value = '1995-05-05'); await p.click('#ag-go'); }
   const terms = await p.waitForSelector('#tm-ok', { timeout: 4000 }).catch(() => null); if (terms) { await p.click('#tm-ok'); await p.click('#tm-yes'); await p.waitForSelector('#losswarn', { timeout: 8000 }).then(() => p.$eval('#loss-ok', e => e.click())).catch(() => {}); }
   await until(p, () => globalThis.__cmMesh?.()?.code); await until(p, () => !document.getElementById('jackin')); return p; };

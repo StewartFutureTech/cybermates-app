@@ -58,3 +58,7 @@ html.lowfx .neon-edge:not(.card)::after,html.lowfx .wallet::after{display:none}
 @media (prefers-reduced-motion:reduce){body::after{animation:none;transform:perspective(320px) rotateX(62deg)}.neon-edge::after,.wallet::after{animation:none;display:none}.card{transition:none}}
 @media (max-width:420px){.card,.glass{-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}body::after{opacity:.24}}
 html[data-theme=light] body::after{opacity:.18}
+
+/* cm-v58: bottom padding follows the measured nav + ad bar height (set by syncChrome in main.js) so nothing is clipped */
+body.cm-padb main{padding-bottom:calc(var(--chrome-b,100px) + 28px + env(safe-area-inset-bottom))}
+.arc-over{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);z-index:6;pointer-events:none;text-align:center;padding:10px 18px;min-width:160px}

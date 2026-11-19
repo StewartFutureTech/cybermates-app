@@ -11,7 +11,7 @@ const only = process.env.GAMES?.split(','); const G = Object.entries(ALL).filter
 const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: true, protocolTimeout: 300000, args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] });
 let fail = 0; const rows = []; if (SH) fs.mkdirSync(SH, { recursive: true });
 const one = async ([name, q], ctxTest) => { const p = await b.newPage(); try { p.setDefaultTimeout(120000); await p.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-  await p.evaluateOnNewDocument(() => { localStorage.setItem('cm.sound', 'off'); localStorage.setItem('cm.arc.3d', 'on'); localStorage.setItem('cybermates:perf-skipgates', '1'); globalThis.__cmAckTest = { minMs: 0, noScroll: true };
+  await p.evaluateOnNewDocument(() => { localStorage.setItem('cm.sound', 'off'); localStorage.setItem('cm.arc.3d', 'on'); localStorage.setItem('cybermates:perf-skipgates', '1'); globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true };
     const raf = globalThis.requestAnimationFrame.bind(globalThis); globalThis.requestAnimationFrame = f => raf(t => { if (globalThis.__cm3d) { const e = performance.now() + 35; while (performance.now() < e); } f(t); }); });
   await p.goto(U + '?loaderMin=0&force3d=1' + (process.env.EXTRAQ || '') + q);
   const ag = await p.waitForSelector('#ag-dob', { timeout: 30000 }).catch(() => null); if (ag) { await p.$eval('#ag-dob', e => e.value = '1995-05-05'); await p.$eval('#ag-go', e => e.click()); }

@@ -38,7 +38,7 @@ async function device(tag, { cam = false, init = {} } = {}) {
   const p = await ctx.newPage(); p.setDefaultTimeout(60000); const errs = []; p.on('pageerror', e => errs.push(e.message)); p.tag = tag; p.errs = errs;
   await p.exposeFunction('__cmRelaySend', (name, m) => { for (const o of subs.get(name) || []) if (o !== p) o.evaluate(([n, x]) => globalThis.__cmRelayRecv(n, x), [name, m]).catch(() => {}); });
   await p.exposeFunction('__cmRelaySub', name => { (subs.get(name) || subs.set(name, new Set()).get(name)).add(p); });
-  await p.addInitScript(init => { localStorage.setItem('cm.sound', 'off'); globalThis.__cmAckTest = { minMs: 0, noScroll: true }; const fns = new Map();
+  await p.addInitScript(init => { localStorage.setItem('cm.sound', 'off'); globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; const fns = new Map();
     globalThis.__cmRelayRecv = (n, m) => (fns.get(n) || []).forEach(f => f(m));
     globalThis.__cmLinkTest = { timeoutMs: 3000, ...init, bus: name => { globalThis.__cmRelaySub(name); let mine = null; return { send: m => globalThis.__cmRelaySend(name, m), on: fn => { mine = fn; (fns.get(name) || fns.set(name, []).get(name)).push(fn); }, close: () => fns.set(name, (fns.get(name) || []).filter(f => f !== mine)) }; } }; }, init);
   if (cam) { await p.addInitScript({ path: JSQR_PATH }); await p.addInitScript(() => {

@@ -5,6 +5,7 @@ import { badge } from './mood.js';
 import { STARTER_MAX } from './mesh.js';
 import { REPORT_REASONS, submitReport, SAFETY_CONTACT } from './compliance.js';
 import { supabaseBackend } from './kv-store.js';
+const DEV_UI = import.meta.env?.VITE_ADMIN === '1' || !!import.meta.env?.DEV;
 const CSAM_REASON = 'illegal content (incl. child abuse)'; // = evidence.js CSAM_REASON (kept inline so evidence.js stays a lazy chunk)
 // Report flow: reason + optional evidence (only what the reporter explicitly agrees to attach). Also blocks if asked.
 export async function reportFlow(m, code, excerpt = '', context = excerpt ? 'chat' : 'profile', game = null) {
@@ -33,7 +34,7 @@ export function discoverSection() {
   const ps = m.peers().filter(p => !m.passed?.has(p.code)); const on = ps.filter(p => p.full), off = ps.filter(p => !p.full);
   return `<div class="card" data-mesh="discover"><h3>🟢 Live now on the mesh (${on.length})</h3><p class="muted small">Real peers on ${esc(m.transport)}. Full profiles only while they're online.</p>${on.length ? '' : '<p class="small" data-mesh="node-online">🟢 You\'re online as a mesh node. No other peers yet — you\'ll see people here as soon as they join.</p>'}
     ${on.map(v => `<div class="card row" data-peer="${v.code}">${av(v.profile)}<div class="grow"><b>${esc(v.profile.name)}</b>${v.profile.age ? ', ' + v.profile.age : ''} ${badge(m.moodOf?.(v.code))} <span class="tag hot">online</span> <span class="muted small">#${v.code}</span>${v.unverified ? ' <span class="muted small" title="Signature check pending">· verifying…</span>' : ''}<div class="muted small">${esc([v.profile.city, v.profile.countryCode].filter(Boolean).join(', '))} · ${esc((v.profile.games || []).slice(0, 3).join(', '))}</div><div class="small">${esc(v.profile.bio || '')}</div></div>
-      <div class="col gap"><button class="primary" data-mchat="${v.code}">Message</button><button data-mview="${v.code}">View profile</button><button class="ghost" data-mpass="${v.code}">✕ Pass</button>${m.node.friends.has(v.code) ? '<span class="small">👥 friend</span>' : `<button data-mfriend="${v.code}">Add friend</button>`}<button class="ghost" data-mreport="${v.code}">Report</button><button data-mblock="${v.code}" class="ghost">Block</button></div></div>`).join('') || '<p class="muted small">Nobody else online right now. Open another tab with <code>?as=seed-3</code> to test locally.</p>'}
+      <div class="col gap"><button class="primary" data-mchat="${v.code}">Message</button><button data-mview="${v.code}">View profile</button><button class="ghost" data-mpass="${v.code}">✕ Pass</button>${m.node.friends.has(v.code) ? '<span class="small">👥 friend</span>' : `<button data-mfriend="${v.code}">Add friend</button>`}<button class="ghost" data-mreport="${v.code}">Report</button><button data-mblock="${v.code}" class="ghost">Block</button></div></div>`).join('') || '<p class="muted small">Nobody else is online near you right now. Invite a friend from the Friends tab, or check back soon.</p>'}
     <div id="recentlist" data-mesh="recent"></div></div>`;
 }
 export function wireDiscover(root, st, render) {
@@ -96,7 +97,7 @@ export function wireFriends(root, st, render) {
 export function devSection() {
   const m = mesh(); if (!m) return notMesh;
   return `<div class="card" data-mesh="dev"><h3>🕸️ Mesh</h3><p class="small">You: <b id="mycode">${m.code}</b> · transport: ${esc(m.transport)} · active list: ${m.member.active.size} · online now: ${m.online().length} · cached stubs: ${m.node.cache.size} · friends: ${m.node.friends.size} · blocked: ${m.node.blocked.size}</p>
-    <p class="muted small">Test locally: open more tabs with <code>?as=seed-3</code>, <code>?as=seed-5</code>… (each tab = different demo user).</p><pre class="small muted">${esc(m.log.slice(0, 12).join('\n'))}</pre></div>`;
+    ${DEV_UI ? `<p class="muted small">Test locally: open more tabs with <code>?as=seed-3</code>, <code>?as=seed-5</code>… (each tab = different demo user).</p><pre class="small muted">${esc(m.log.slice(0, 12).join('\n'))}</pre>` : ''}</div>`;
 }
 
 // v52 Quiet safety number sheet (diggable; no banner / no nag).

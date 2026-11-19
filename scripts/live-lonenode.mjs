@@ -5,7 +5,7 @@ const U = (process.argv[2] || 'https://cybermates.vercel.app/').replace(/\/?$/, 
 const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox'] });
 const p = await b.newPage(); p.on('pageerror', e => console.log('PAGEERR', e.message)); p.on('console', m => m.type() === 'error' && console.log('CERR', m.text().slice(0, 200))); await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true }); const errs = [];
 p.on('console', async m => { if (m.text().startsWith('mesh')) { const a = m.args()[1]; errs.push(a ? await a.evaluate(e => String(e?.message || e)).catch(() => '?') : m.text()); } });
-await p.evaluateOnNewDocument(() => { localStorage.setItem('cm.sound', 'off'); globalThis.__cmAckTest = { minMs: 0, noScroll: true }; });
+await p.evaluateOnNewDocument(() => { localStorage.setItem('cm.sound', 'off'); globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; });
 if (process.argv[3]) await p.goto(process.argv[3]); // optional Vercel share link (sets the preview access cookie)
 await p.goto(U + '?loaderMin=0');
 if (await p.waitForSelector('#ag-dob', { timeout: 8000 }).catch(() => null)) { await p.$eval('#ag-dob', e => e.value = '1995-05-05'); await p.$eval('#ag-go', e => e.click()); }

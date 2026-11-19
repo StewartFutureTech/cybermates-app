@@ -41,7 +41,7 @@ export async function p2pPanel(el, me) {
   refresh = () => p2pPanel(el, me);
   const n = await ensureNet(me.id).catch(() => null); const c = getConsent(), k = getKillState();
   el.innerHTML = `<div class="card"><h3>🔗 Peer network (beta)</h3>
-    <p class="muted small">Backend: ${BACKEND}${BACKEND === 'local' ? ' (simulated via BroadcastChannel across tabs)' : ''} · Consent: ${c ? 'v' + esc(c.version) + ' on ' + new Date(c.at).toLocaleString() : 'not given'} · Status: ${k ? '<b>DISABLED by kill switch</b>' : n?.joined ? `joined, ${n.peers.size} peer(s)` : 'offline'}</p>
+    <p class="muted small">Backend: ${BACKEND}${BACKEND === 'local' ? ' (simulated via BroadcastChannel across tabs)' : ''} · Consent: ${c ? 'v' + esc(c.version) + ' on ' + new Date(c.at).toLocaleString() : 'not given'} · Status: ${k ? '<b>DISABLED by kill switch</b>' : n?.joined ? `joined, ${n.peers.size} peer(s)` : 'not joined (this beta relay is separate from the live mesh shown in Discover)'}</p>
     <div class="row gap">${n?.joined ? '<button id="p2p-leave">Leave</button>' : `<button id="p2p-join" ${k ? 'disabled' : ''}>Join peer network</button>`}${c ? '<button id="p2p-revoke">Withdraw consent</button>' : ''}</div>
     ${import.meta.env.VITE_ADMIN === '1' ? `<details style="margin-top:8px"><summary class="small">Test: paste a signed control message (from scripts/kill-switch.mjs)</summary><textarea id="p2p-msg" rows="4" style="width:100%"></textarea><button id="p2p-sim">Simulate broadcast</button></details>` : ''}
     ${log.length ? `<pre class="small muted">${esc(log.join('\n'))}</pre>` : ''}</div>`;

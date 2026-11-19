@@ -10,7 +10,7 @@ let fail = 0; const ok = (c, m) => { console.log((c ? 'ok ' : 'FAIL ') + m); if 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 try {
   const p = await b.newPage(); p.setDefaultTimeout(30000); await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true }); const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('dialog', d => d.accept());
-  await p.evaluateOnNewDocument(() => { globalThis.__cmAckTest = { minMs: 3000 }; localStorage.setItem('cm.sound', 'off'); });
+  await p.evaluateOnNewDocument(() => { globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 3000 }; localStorage.setItem('cm.sound', 'off'); });
   await p.goto(U + '?jackbtn=1');
   ok(!!(await p.waitForSelector('#ag-dob').catch(() => null)), '1. age check first'); await p.$eval('#ag-dob', e => e.value = '1992-03-03'); await p.$eval('#ag-go', e => e.click());
   ok(!!(await p.waitForSelector('#tm-scroll').catch(() => null)), '2. acknowledgement with scroll box'); ok(!!(await p.$('#tm-read')), 'Read-to-me button at the top');

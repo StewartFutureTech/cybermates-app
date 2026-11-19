@@ -26,7 +26,7 @@ async function device(tag) {
   const p = await ctx.newPage(); p.setDefaultTimeout(60000); p.errs = []; p.tag = tag; p.on('pageerror', e => p.errs.push(e.message));
   await p.exposeFunction('__cmRelaySend', (name, m) => { if (name === 'bc:cm-mesh') wire.push(JSON.stringify(m)); for (const o of subs.get(name) || []) if (o !== p) o.evaluate(([nm, x]) => nm === 'bc:cm-mesh' ? globalThis.__cmBcRecv?.(x) : globalThis.__cmRelayRecv(nm, x), [name, m]).catch(() => {}); });
   await p.exposeFunction('__cmRelaySub', name => { (subs.get(name) || subs.set(name, new Set()).get(name)).add(p); });
-  await p.addInitScript(() => { localStorage.setItem('cm.sound', 'off'); globalThis.__cmAckTest = { minMs: 0, noScroll: true }; const fns = new Map();
+  await p.addInitScript(() => { localStorage.setItem('cm.sound', 'off'); globalThis.__cmDemoUser ??= 'seed-26'; globalThis.__cmAckTest = { minMs: 0, noScroll: true }; const fns = new Map();
     globalThis.__cmRelayRecv = (nm, m) => (fns.get(nm) || []).forEach(f => f(m));
     globalThis.__cmLinkTest = { timeoutMs: 3000, bus: name => { globalThis.__cmRelaySub(name); let mine = null; return { send: m => globalThis.__cmRelaySend(name, m), on: fn => { mine = fn; (fns.get(name) || fns.set(name, []).get(name)).push(fn); }, close: () => fns.set(name, (fns.get(name) || []).filter(f => f !== mine)) }; } };
     // the mesh bus is a BroadcastChannel: bridge it across the isolated contexts (separate phones)

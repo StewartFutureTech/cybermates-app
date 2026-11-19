@@ -40,8 +40,12 @@ export function megaFleetView(v, me, { tabs = '' } = {}) { stopMegaFleet(); if (
   const steer = e => { const a = aimFrom(e); if (a != null) { room.input(myCode, { a }); net.aim = a; } };
   const shoot1 = () => { const p = self(); if (p?.alive && p.cd <= 0) { p.cd = MS.FIRE_CD; room.fireShot(p); } };
   for (const el of [c3, cv]) { el.addEventListener('pointerdown', e => { e.preventDefault(); el.setPointerCapture?.(e.pointerId); down = { x: e.clientX, y: e.clientY, t: performance.now() }; steer(e); });
-    el.addEventListener('pointermove', e => { if (down || (e.pointerType === 'mouse' && mouseSteer)) steer(e); if (e.pointerType === 'mouse') mouseSteer = true; });
+    el.addEventListener('pointermove', e => { if (down) steer(e); });
     const up = e => { if (down && performance.now() - down.t < 240 && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 14) shoot1(); down = null; }; el.addEventListener('pointerup', up); el.addEventListener('pointercancel', () => { down = null; }); }
+  // cm-v58: mouse steering by movement alone. Any mouse move over the stage (canvas or HUD) aims the ship at the cursor, and the
+  // ship keeps turning toward the last cursor position while it flies (no drag needed). Touch keeps drag-to-steer.
+  let lastMouse = null; stageEl.addEventListener('pointermove', e => { if (e.pointerType !== 'mouse' || e.target === fireB) return; lastMouse = { clientX: e.clientX, clientY: e.clientY }; mouseSteer = true; if (!down) steer(lastMouse); });
+  stageEl.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') lastMouse = null; }); R.follow = () => { if (mouseSteer && lastMouse && !down) steer(lastMouse); };
   const setFire = on => { room.input(myCode, { fire: on }); fireB.classList.toggle('on', on); };
   fireB.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); fireB.setPointerCapture?.(e.pointerId); setFire(true); }); for (const k of ['pointerup', 'pointercancel', 'lostpointercapture']) fireB.addEventListener(k, () => setFire(false));
   const keyT = { ArrowLeft: -1, a: -1, A: -1, ArrowRight: 1, d: 1, D: 1 };
@@ -58,7 +62,7 @@ export function megaFleetView(v, me, { tabs = '' } = {}) { stopMegaFleet(); if (
   send({ op: 'mfj', name: me?.name, minor });
   // ---- sim loop + sounds
   let lbAt = 0, prevMass = 0;
-  R.loop = setInterval(() => { if (!stageEl.isConnected) return stopMegaFleet(); const W = L.where.get(myCode) || room; const evs = W.step(MS.DT), p = W.players.get(myCode), V = R.view;
+  R.loop = setInterval(() => { if (!stageEl.isConnected) return stopMegaFleet(); R.follow?.(); const W = L.where.get(myCode) || room; const evs = W.step(MS.DT), p = W.players.get(myCode), V = R.view;
     for (const e of evs) { const mine = e.by === myCode;
       if (e.t === 'shot' && e.who === myCode) { sfx('laser', { gain: 0.45, pitch: 1.25 - Math.min(0.6, MS.radius(p?.mass || 10) / 140) }); send({ op: 'mfx', s: { n: e.shot.n, x: e.shot.x, y: e.shot.y, vx: e.shot.vx, vy: e.shot.vy, life: e.shot.life, r: e.shot.r, dmg: e.shot.dmg } }); }
       if (e.t === 'rockhit') { V?.flash(e.key); if (mine) sfx('hit', { gain: 0.35, pitch: 1.5 - e.tier * 0.18 }); }

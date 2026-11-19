@@ -11,8 +11,8 @@ export const REWARD_STREAK = 2, REWARD_GAP_MS = 10 * 60e3, REWARD_DAILY_CAP = 5,
 // price in cents. kind: consumable (boosts) | nonconsumable (unlock) | sub (handled by legacy mock subscription path)
 export const CATALOG = [
   { sku: 'boost1', title: '1 boosted message', cents: 49, kind: 'consumable', boosts: 1, group: 'boosts', desc: 'Highlights one connection request at the top of their inbox. Refunded automatically if it is never delivered.' },
-  { sku: 'pack5', title: 'Starter pack: 5 boosted messages', cents: 199, kind: 'consumable', boosts: 5, group: 'boosts', best: true, desc: '5 initial messages, each boosted (the boost equivalent of 5 Super Likes / Roses). $0.40 each.' },
-  { sku: 'boost15', title: '15 boosted messages', cents: 499, kind: 'consumable', boosts: 15, group: 'boosts', desc: '$0.33 each. Never expire.' },
+  { sku: 'pack5', title: 'Starter pack: 5 boosted messages', cents: 199, kind: 'consumable', boosts: 5, group: 'boosts', best: true, desc: '5 initial messages, each boosted (the boost equivalent of 5 Super Likes / Roses). about $0.40 each.' },
+  { sku: 'boost15', title: '15 boosted messages', cents: 499, kind: 'consumable', boosts: 15, group: 'boosts', desc: 'About $0.33 each. Never expire.' },
   { sku: 'noads', title: 'Remove ads', cents: 149, kind: 'nonconsumable', unlock: 'noads', group: 'ads', desc: 'One-time. Hides the bottom banner forever on this device. Rewarded videos stay available (opt-in).' },
   { sku: 'emoji_neon', title: 'Neon emoji pack', cents: 99, kind: 'nonconsumable', unlock: 'emoji:neon', group: 'cosmetic', desc: '24 glowing reaction emoji.', preview: '⚡💠🔮🌐🛸🎛' },
   { sku: 'emoji_retro', title: 'Retro arcade emoji pack', cents: 99, kind: 'nonconsumable', unlock: 'emoji:retro', group: 'cosmetic', desc: '24 8-bit reaction emoji.', preview: '👾🕹🍒💾📼🏁' },

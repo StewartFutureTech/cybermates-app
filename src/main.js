@@ -161,6 +161,14 @@ const avatar = (p, size = 48, { self = false, mutual = false } = {}) => {
 };
 const verified = p => p?.verified ? '<span class="vbadge" title="Verified (preview — real checks coming soon)">✔</span>' : '';
 
+// cm-v58: measure the real bottom chrome (nav + ad bar, which grow when labels wrap) so the ad bar sits on top of the nav and
+// page content always clears both (main padding-bottom follows --chrome-b).
+let chromeRO = null;
+function syncChrome() { const nav = document.querySelector('#app > nav'); if (!nav) return; const r = document.documentElement.style, ad = document.getElementById('adslot');
+  const nh = Math.ceil(nav.getBoundingClientRect().height); if (nh) r.setProperty('--navh', nh + 'px');
+  const ah = ad ? Math.ceil(ad.getBoundingClientRect().height) : 0; r.setProperty('--chrome-b', (nh + ah) + 'px'); document.body.classList.add('cm-padb');
+  if (globalThis.ResizeObserver && !chromeRO) { chromeRO = new ResizeObserver(() => syncChrome()); } if (chromeRO && nav.dataset.ro !== '1') { chromeRO.disconnect(); chromeRO.observe(nav); nav.dataset.ro = '1'; } }
+addEventListener('resize', () => syncChrome());
 async function render() {
   st.me = await db.getProfile(await db.getCurrentUserId());
   if (!st.me) { st.tab = 'onboard'; }
@@ -168,11 +176,15 @@ async function render() {
   if (st.tab !== 'discover') mesh()?.setDiscovery?.(null, false); // not searching: no relay duty, no discovery queries
   const app = $('#app');
   const unread = st.me ? (await db.listMessages(st.me.id)).filter(m => m.to === st.me.id && !m.read).length : 0;
+  const oldNav = app.querySelector(':scope > nav'); // cm-v58: keep the same nav node across mesh re-renders so a click that lands mid-refresh isn't lost
   app.innerHTML = `<header><b class="logo">${logoHTML()}<small>social mesh</small></b>${T.headerToggles()}${IU.parentButton(st.me)}<span class="who">${st.me ? IU.headerMood() + avatar(st.me, 30, { self: true }) : ''}</span></header>
   <main id="view"></main>
   <nav>${[['discover', '🔥', 'Discover'], ['inbox', '💬', 'Inbox' + (unread ? ` (${unread})` : '')], ['arcade', '🕹', 'Arcade'], ['friends', '👥', 'Friends'], ...(st.me && rouletteVisible(st.me) ? [['roulette', '🎲', 'Connect']] : []), ['profile', '👤', 'Profile'], ['shop', '💎', 'Shop'], ['help', '🤖', 'Help'], ...(ADMIN ? [['dev', '🛠', 'Dev']] : [])].map(([t, i, l]) => `<button data-tab="${t}" class="${st.tab === t ? 'on' : ''}">${navIcon(t, st.tab === t)}${l}</button>`).join('')}</nav>`;
-  if (st.me && !['onboard', 'arcade'].includes(st.tab)) SHOP.mountBanner(app, st.me).catch(() => {}); else SHOP.unmountBanner(); // bottom house-ad slot (hidden after Remove ads)
+  { const nn = app.querySelector(':scope > nav'); if (nn) { const sig = nn.outerHTML.replace(/class="nic act"/g, 'class="nic"'); /* the one-shot icon animation flag doesn't count as a change */ if (oldNav && oldNav.dataset.sig === sig) nn.replaceWith(oldNav); else nn.dataset.sig = sig; } }
+  if (st.me && !['onboard', 'arcade'].includes(st.tab)) SHOP.mountBanner(app, st.me).then(syncChrome, () => {}); else SHOP.unmountBanner();
+  syncChrome(); // bottom house-ad slot (hidden after Remove ads)
   T.wireHeader(app); app.querySelector('#parentbtn')?.addEventListener('click', () => IU.openParent());
+  { const hav = app.querySelector('header .who .av'); if (hav) { hav.setAttribute('role', 'button'); hav.tabIndex = 0; hav.title = 'Your profile'; hav.style.cursor = 'pointer'; hav.dataset.hdrAv = '1'; const go = () => { st.tab = 'profile'; st.chatWith = null; st.meshChat = null; render(); }; hav.onclick = go; hav.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } }; } } // cm-v58: header avatar opens Profile
   app.querySelectorAll('nav button').forEach(b => b.onclick = () => { st.tab = b.dataset.tab; st.chatWith = null; st.meshChat = null; render(); });
   const v = $('#view'); if (st.tab !== 'arcade') stopArcade(); if (st.tab !== 'friends') FLUI.leave(); // friend link burns when its page closes
   if (st.tab === 'roulette' && !rouletteVisible(st.me)) st.tab = 'discover'; // 18+ only
@@ -331,7 +343,7 @@ function locate(p) {
 }
 
 async function onboard(v) {
-  if (!st.draft) st.draft = st.me ? structuredClone(st.me) : { id: 'user-' + Date.now(), name: '', answers: {}, lookingFor: [], platforms: [], gamertags: {}, socials: {}, photos: [], photoReveal: 'match', reveal: {}, avatarHue: Math.floor(Math.random() * 360), createdAt: Date.now() };
+  if (!st.draft) st.draft = st.me ? structuredClone(st.me) : { id: 'user-' + Date.now(), name: '', ...(PV.ageFrom(C0.sessionBirthdate?.() || '') != null ? { age: PV.ageFrom(C0.sessionBirthdate()) } : {}), /* cm-v58: age pre-filled from the age gate (the birth date itself is not stored here) */ answers: {}, lookingFor: [], platforms: [], gamertags: {}, socials: {}, photos: [], photoReveal: 'match', reveal: {}, avatarHue: Math.floor(Math.random() * 360), createdAt: Date.now() };
   const d = st.draft, steps = flow(d);
   if (st.step >= steps.length) return review(v, steps);
   const f = steps[st.step], pct = Math.round(100 * st.step / steps.length);
@@ -380,7 +392,7 @@ async function review(v, steps) {
   $('#finish').onclick = async () => {
     const gate = await checkDevice(); if (!gate.allowed) { alert(gate.message); return; }
     const p = d; if (!p.name) { st.step = 0; return render(); }
-    if (p.age == null || p.age < 18) { alert('Cybermates is 18+ only — please add your age.'); st.step = flow(d).findIndex(f => f.k === 'age'); return render(); }
+    if (p.age == null || p.age < 18 || p.age > 120) { alert(p.age > 120 ? 'Please enter a real age.' : 'Cybermates is 18+ only — please add your age.'); st.step = flow(d).findIndex(f => f.k === 'age'); return render(); }
     if (!p.lookingFor?.length) p.lookingFor = ['friends', 'gaming'];
     geocodeLocal(p);
     { const miss = missingProfile({ ...p, countryCode: p.countryCode || (p.city ? 'US' : '') }); if (miss.length) { // UX §2.5: cannot proceed until the profile is complete

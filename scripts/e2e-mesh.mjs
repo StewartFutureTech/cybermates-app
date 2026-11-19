@@ -12,7 +12,7 @@ console.log('preview up'); browser = await puppeteer.launch({ executablePath: pr
 console.log('chrome up');
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const until = async (page, fn, arg, ms = 15000) => page.waitForFunction(fn, { timeout: ms, polling: 200 }, arg);
-const open = async as => { const p = await browser.newPage(); p.on('dialog', d => d.accept()); p.on('pageerror', e => console.log(`[${as}] pageerror`, e.message)); await p.goto(URL0 + '?as=' + as + '&loaderMin=300');
+const open = async as => { const p = await browser.newPage(); p.on('dialog', d => d.accept()); await p.evaluateOnNewDocument(() => { globalThis.__cmAckTest = { minMs: 0, noScroll: true }; localStorage.setItem('cm.sound', 'off'); }); p.on('pageerror', e => console.log(`[${as}] pageerror`, e.message)); await p.goto(URL0 + '?as=' + as + '&loaderMin=300');
   const ag = await p.waitForSelector('#ag-dob', { timeout: 6000 }).catch(() => null); if (ag) { await p.$eval('#ag-dob', e => e.value = '1995-05-05'); await p.click('#ag-go'); }
   const terms = await p.waitForSelector('#tm-ok', { timeout: 4000 }).catch(() => null); if (terms) { await p.click('#tm-ok'); await p.click('#tm-yes'); await p.waitForSelector('#losswarn', { timeout: 8000 }).then(() => p.$eval('#loss-ok', e => e.click())).catch(() => {}); }
   await until(p, () => globalThis.__cmMesh?.()?.code); await until(p, () => !document.getElementById('jackin')); return p; };
@@ -34,7 +34,7 @@ try {
   assert(new Set([a, b, c, d, e]).size === 5, `5 tabs joined with distinct user codes ${a} ${b} ${c} ${d} ${e}`);
   for (const P of ALL) await until(P, n => __cmMesh().online().length >= n, 4, 25000);
   assert(true, 'all 5 tabs see each other online (presence + gossip membership)');
-  assert((await A.evaluate(() => __cmMesh().member.active.size)) >= 5, 'gossip active list on A has all 5 phones');
+  assert(await until(A, () => __cmMesh().member.active.size >= 5, null, 30000).then(() => true, () => false), 'gossip active list on A has all 5 phones'); // gossip converges a little after presence
   await until(B, x => __cmMesh().moodOf(x) === 'gaming', a, 20000);
   assert(true, "B sees A's session mood (gaming) from the signed presence row");
   await tab(A, 'discover');

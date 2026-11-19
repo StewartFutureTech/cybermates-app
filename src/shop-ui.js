@@ -3,9 +3,11 @@ import * as S from './shop.js';
 import { db } from './store.js';
 import { mesh } from './app-mesh.js';
 import { isMinor } from './discovery.js';
+// cm-v58: real checkout (Stripe) is not connected yet; purchases use the stub (never charges). Flip when checkout goes live.
+const STORE_LIVE = false;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // House ads: in-app promos only (no ad network, no tracking, no keys). Safe for every age.
-export const HOUSE_ADS = ['🔗 Add friends instantly — Friends → Create friend link', '🕹 Challenge a friend in the Arcade', '🎨 New neon emoji packs in the Shop', '🛡 You can block anyone, anytime — Settings'];
+export const HOUSE_ADS = ['🔗 Add friends instantly — Friends → Create friend link', '🕹 Challenge a friend in the Arcade', '🎨 New neon emoji packs in the Shop', '🛡 You can block anyone, anytime — tap their name, then Block'];
 const shops = new Map();
 export function shopFor(me) { if (!me) return null; const k = me.id; let s = shops.get(k); if (!s) { s = new S.Shop({ wallet: db._w(), uid: me.id }); shops.set(k, s); } s.minor = isMinor(me); s.parent = mesh()?.parent || null; return s; }
 let adI = 0;
@@ -18,7 +20,7 @@ const card = (it, s, owned) => `<div class="card glass row shopitem ${it.best ? 
 export async function shopView(v, st, render) { const me = st.me, s = shopFor(me), minor = isMinor(me), stt = await s.state(), wv = await db.getWalletView(me.id);
   const own = it => [].concat(it.unlock || []).length > 0 && [].concat(it.unlock).every(u => u === 'noads' ? stt.noads : stt.unlocks.has(u));
   const group = g => S.CATALOG.filter(i => i.group === g && (!minor || S.allowedForMinor(i)));
-  v.innerHTML = `<div data-shop2><div class="card glass warn small">🧪 TEST STORE — payments are stubbed (Stripe not connected). Nothing is charged.</div>
+  v.innerHTML = `<div data-shop2>${STORE_LIVE ? '' : '<div class="card glass warn small">Payments aren\'t live yet: purchases here are free test credits and nothing is charged.</div>'}
   <div class="wallet glass neon-edge"><b>💎 ${wv.boosts}</b> boosts${wv.plus ? ' · ⭐ Cybermates+' : ''} ${stt.ok ? '<span class="tag">ledger ✓</span>' : '<span class="tag hot">ledger tampered — purchases paused</span>'}</div>
   ${minor ? `<p class="small muted">Under 18: purchases need a parent's PIN. Dating features aren't sold to under-18s.</p>` : ''}
   <h3>🎬 Watch &amp; earn</h3><div class="card glass row"><div class="grow"><b>Watch 2 short ads in a row → 1 free boost</b><div class="muted small">${s.streak.n}/${S.REWARD_STREAK} watched · up to ${S.REWARD_DAILY_CAP} free boosts a day (${stt.rewardsToday} today)</div><div class="streak">${Array.from({ length: S.REWARD_STREAK }, (_, i) => `<i class="${i < s.streak.n ? 'on' : ''}"></i>`).join('')}</div></div><button class="primary" data-reward>▶ Watch</button></div>
@@ -27,7 +29,7 @@ export async function shopView(v, st, render) { const me = st.me, s = shopFor(me
   <h3>✨ Cosmetics</h3>${group('cosmetic').map(i => card(i, s, own(i))).join('')}
   ${minor ? '' : `<h3>⭐ Cybermates+</h3>${group('plus').map(i => `<div class="card glass row"><div class="grow"><b>${esc(i.title)}</b><div class="muted small">${esc(i.desc)}</div></div><button class="primary" data-plus="${i.sku}" ${wv.plus ? 'disabled' : ''}>${wv.plus ? 'Active' : S.price(i.cents)}</button></div>`).join('')}${wv.plus ? '<button class="ghost small" data-pluscancel>Cancel Cybermates+ (test)</button>' : ''}`}
   <h3 class="small">Purchase history</h3>${stt.entries.slice().reverse().slice(0, 12).map(e => `<div class="row small ledger"><span class="grow">${e.type === 'refund' ? '↩ refund' : e.type === 'reward' ? '🎬 reward' : '🧾'} ${esc(S.bySku(e.sku)?.title || e.sku)}</span><span class="muted">${e.cents ? S.price(e.cents) : 'free'}</span>${e.type === 'purchase' && !stt.entries.some(x => x.type === 'refund' && x.ref === e.id) ? `<button class="ghost small" data-refund="${e.id}">Refund (test)</button>` : ''}</div>`).join('') || '<p class="muted small">No purchases yet.</p>'}
-  <p class="muted small">Prices in USD, set below half of typical competitor prices (see in-app pricing notes). Messages in existing conversations are always free.</p></div>`;
+  <p class="muted small">Prices in USD. Messages in existing conversations are always free.</p></div>`;
   const msg = r => r.message || ({ 'already-owned': 'You already own this.', 'ledger-tampered': 'Purchase history failed its integrity check.', 'minor-dating': 'Not available under 18.', 'daily-cap': 'Daily free boost limit reached.', 'not-watched': 'Watch the whole ad to count it.' })[r.reason] || r.reason;
   const pin = async r => { if (r.reason !== 'parent-locked' || !s.parent) return false; const p = prompt('Parent PIN'); if (!p) return false; return (await s.parent.unlock(p)).ok; };
   v.querySelectorAll('[data-buy2]').forEach(b => b.onclick = async () => { let r = await s.buy(b.dataset.buy2); if (!r.ok && await pin(r)) r = await s.buy(b.dataset.buy2); if (!r.ok) alert(msg(r)); render(); });
